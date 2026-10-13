@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHeaderView,
+    QLabel,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -47,10 +48,13 @@ class CircuitsPanel(QWidget):
         self.order.addItems(ORDERS)
         self.reference = QComboBox()
         self.reference.addItems(REFERENCE_KINDS)
+        self.reference_note = QLabel("")
+        self.reference_note.setWordWrap(True)
         form = QFormLayout()
         form.addRow("Circuit 1 corner", self.first)
         form.addRow("Numbering order", self.order)
         form.addRow("Reference point", self.reference)
+        form.addRow("", self.reference_note)
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.verticalHeader().setVisible(False)
@@ -87,11 +91,18 @@ class CircuitsPanel(QWidget):
             for w in (self.first, self.order, self.reference):
                 w.setEnabled(a is not None and not read_only)
             if a is None:
+                self.reference_note.setText("")
                 return
             self.first.setCurrentText(a.numbering.first)
             self.order.setCurrentText(a.numbering.order)
             if a.reference_kind in REFERENCE_KINDS:
                 self.reference.setCurrentText(a.reference_kind)
+            rx, ry = a.reference_board
+            if a.circuits:
+                px, py = a.circuits[0].transform.apply(rx, ry)
+                self.reference_note.setText(f"In use: {a.reference_kind}, circuit 1 at ({px:.3f}, {py:.3f}) on the panel")
+            else:
+                self.reference_note.setText(f"In use: {a.reference_kind}")
             self.table.setRowCount(len(a.circuits))
             for r, c in enumerate(a.circuits):
                 self.table.setItem(r, 0, num_item(c.index, "{}"))

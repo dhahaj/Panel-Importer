@@ -140,7 +140,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _utf8_output() -> None:
+    """Write UTF-8 when the output is not already UTF-8 (e.g. redirected on Windows),
+    so "3 × 2" and "ΔX" survive pipes and log files."""
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if stream is not None and encoding != "utf8" and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_output()
     parser = build_parser()
     args = parser.parse_args(argv)
     logging.basicConfig(level=getattr(logging, str(args.log).upper(), logging.WARNING), format="%(levelname)s %(name)s: %(message)s")
