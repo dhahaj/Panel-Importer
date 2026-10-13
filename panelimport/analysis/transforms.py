@@ -45,29 +45,29 @@ class Transform:
 
     # ---------------------------------------------------------------- builders
     @staticmethod
-    def identity() -> "Transform":
+    def identity() -> Transform:
         return Transform()
 
     @staticmethod
-    def translation(tx: float, ty: float) -> "Transform":
+    def translation(tx: float, ty: float) -> Transform:
         return Transform(tx=tx, ty=ty)
 
     @staticmethod
-    def rotation_cw(deg: float) -> "Transform":
+    def rotation_cw(deg: float) -> Transform:
         t = math.radians(deg)
         c, s = math.cos(t), math.sin(t)
         return Transform(c, s, -s, c)
 
     @staticmethod
-    def rotation_ccw(deg: float) -> "Transform":
+    def rotation_ccw(deg: float) -> Transform:
         return Transform.rotation_cw(-deg)
 
     @staticmethod
-    def mirror_x() -> "Transform":
+    def mirror_x() -> Transform:
         return Transform(a=-1.0)
 
     @staticmethod
-    def odb_placement(x: float, y: float, rot_cw: float, mirror: bool) -> "Transform":
+    def odb_placement(x: float, y: float, rot_cw: float, mirror: bool) -> Transform:
         """Place local coordinates at (x, y): rotate clockwise, then mirror X, then translate."""
         t = Transform.rotation_cw(rot_cw)
         if mirror:
@@ -75,7 +75,7 @@ class Transform:
         return Transform.translation(x, y) @ t
 
     # ---------------------------------------------------------------- algebra
-    def __matmul__(self, o: "Transform") -> "Transform":
+    def __matmul__(self, o: Transform) -> Transform:
         """Composition: ``(self @ o)(p) == self(o(p))``."""
         return Transform(
             self.a * o.a + self.b * o.c,
@@ -94,7 +94,7 @@ class Transform:
         m = np.array([[self.a, self.b], [self.c, self.d]])
         return pts @ m.T + np.array([self.tx, self.ty])
 
-    def inverse(self) -> "Transform":
+    def inverse(self) -> Transform:
         det = self.det
         if abs(det) < 1e-15:
             raise ZeroDivisionError("singular transform")
@@ -116,9 +116,6 @@ class Transform:
         if self.mirrored:
             return norm_angle(math.degrees(math.atan2(-self.c, -self.a)))
         return norm_angle(math.degrees(math.atan2(self.c, self.a)))
-
-    def as_tuple(self) -> tuple[float, float, float, float, float, float]:
-        return self.a, self.b, self.c, self.d, self.tx, self.ty
 
 
 # -------------------------------------------------------------------- rigid fit

@@ -126,7 +126,7 @@ class Acknowledgement:
         return (self.code, self.designator, self.circuit, self.subject)
 
     @classmethod
-    def of(cls, issue) -> "Acknowledgement":
+    def of(cls, issue) -> Acknowledgement:
         return cls(issue.code, issue.designator, issue.circuit, issue.subject)
 
 

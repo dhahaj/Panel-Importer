@@ -10,14 +10,13 @@ import argparse
 import json
 import logging
 import sys
-from pathlib import Path
 
 from panelimport import __version__
 from panelimport.io.bom import BomError
 from panelimport.io.odb import OdbOpenError
 from panelimport.model.panel import Decisions
 from panelimport.model.project_file import ProjectFileError, check_source, load_project
-from panelimport.model.serialize import SerializationError, to_jsonable
+from panelimport.model.serialize import SerializationError
 from panelimport.report import format_report
 from panelimport.session import Session, SessionError
 from panelimport.settings import CORNERS, ORDERS, REFERENCE_KINDS, Settings

@@ -74,7 +74,7 @@ class AttrDefs:
         return len(self._defs)
 
     @classmethod
-    def parse(cls, files: list[tuple[str, str]]) -> tuple["AttrDefs", list[Issue]]:
+    def parse(cls, files: list[tuple[str, str]]) -> tuple[AttrDefs, list[Issue]]:
         defs: dict[str, AttrDef] = {}
         issues: list[Issue] = []
         for path, text in files:

@@ -18,7 +18,7 @@ from panelimport.io.odb.common import Units, UnitsDirective, parse_units
 from panelimport.io.odb.components import ComponentFile, parse_components
 from panelimport.io.odb.eda import EdaData, parse_eda
 from panelimport.io.odb.features import FeatureFile, parse_features
-from panelimport.io.odb.matrix import Matrix, MatrixLayer, parse_matrix
+from panelimport.io.odb.matrix import MatrixLayer, parse_matrix
 from panelimport.io.odb.stephdr import StepHeader, parse_stephdr
 from panelimport.io.odb.structured import parse_structured
 from panelimport.io.odb.symbols import SymbolShape

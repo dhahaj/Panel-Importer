@@ -1,0 +1,53 @@
+name: build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Qt runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 ncompress
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Build the one-folder bundle
+        run: pyinstaller packaging/panelimport.spec --noconfirm
+      - name: Smoke-test the bundle without Python on PATH
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; from tests.synthetic.odbgen import sr_panel; sr_panel(compress_members=True).write_tgz(Path('smoke.tgz'))"
+          Copy-Item smoke.tgz dist\PanelImporter\
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'Python' }) -join ';'
+          Push-Location dist\PanelImporter
+          .\panelimport.exe analyze smoke.tgz
+          if ($LASTEXITCODE -ne 0) { throw "panelimport.exe analyze failed: $LASTEXITCODE" }
+          $p = Start-Process -FilePath .\PanelImporter.exe -ArgumentList "--smoke-test", "smoke.tgz" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "PanelImporter.exe --smoke-test failed: $($p.ExitCode)" }
+          Remove-Item smoke.tgz
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PanelImporter-windows
+          path: dist/PanelImporter

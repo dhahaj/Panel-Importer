@@ -170,7 +170,7 @@ SIDE_LAYERS = {
 class Step:
     def __init__(
         self,
-        job: "Job",
+        job: Job,
         name: str,
         profile: list[tuple[float, float]],
         datum: tuple[float, float] = (0.0, 0.0),
@@ -351,7 +351,7 @@ class Job:
             body.append("OE")
             body.append("SE")
         head = ["#", "#Units", "#", self.units_line("features").rstrip("\n")]
-        head += ["#", f"#Num Features", "#", f"F {len(pads) + len(lines) + len(surfaces)}", "#", "#Feature symbol names", "#"]
+        head += ["#", "#Num Features", "#", f"F {len(pads) + len(lines) + len(surfaces)}", "#", "#Feature symbol names", "#"]
         head += [f"${i} {n}" for n, i in symbols.items()]
         if attr_names:
             head += ["#", "#Feature attribute names", "#"]
@@ -637,6 +637,28 @@ def populate_board(step: Step, n_parts: int, seed: int = 0, bottom_every: int = 
         side = "bottom" if bottom_every and placed % bottom_every == bottom_every - 1 else "top"
         step.component(f"{p}{count[p]}", pkg, round(cx, 4), round(cy, 4), rot=rng.choice([0, 90, 180, 270]), side=side)
         placed += 1
+
+
+def add_copper(step: Step, n_traces: int, seed: int = 0, pours: int = 2) -> None:
+    """Realistic copper load: random short traces and a few large pours with many vertices."""
+    rng = random.Random(seed)
+    xs = [p[0] for p in step.profile]
+    ys = [p[1] for p in step.profile]
+    x0, x1, y0, y1 = min(xs) + 1, max(xs) - 1, min(ys) + 1, max(ys) - 1
+    for _ in range(n_traces):
+        x, y = rng.uniform(x0, x1), rng.uniform(y0, y1)
+        dx, dy = rng.choice([(1, 0), (0, 1), (1, 1), (1, -1)])
+        length = rng.uniform(0.5, 4.0)
+        step.line("top_copper", x, y, min(x1, x + dx * length), max(y0, min(y1, y + dy * length)), rng.choice([0.15, 0.2, 0.3]))
+    for k in range(pours):
+        cx, cy = rng.uniform(x0, x1), rng.uniform(y0, y1)
+        r = min(x1 - x0, y1 - y0) * 0.2
+        pts = []
+        for i in range(400):
+            t = 2 * math.pi * i / 400
+            rr = r * (0.8 + 0.2 * math.sin(7 * t + k))
+            pts.append((cx + rr * math.cos(t), cy + rr * math.sin(t)))
+        step.surface("top_copper", pts)
 
 
 def sr_panel(

@@ -57,14 +57,11 @@ class Session:
     def open_job(self, job: OdbJob, decisions: Decisions | None = None) -> PanelAnalysis:
         self.job = job
         self.decisions = decisions or Decisions()
-        self.bom = None
-        self.panel_job = None
         self.project_path = None
         self.saved_project = None
         self.extra_issues = []
-        if self.decisions.bom_path:
-            self._load_bom(self.decisions.bom_path)
-        self._load_panel_job()
+        self.bom = read_bom(self.decisions.bom_path) if self.decisions.bom_path else None
+        self.panel_job = self._panel_job_for(self.decisions)
         return self.reanalyze()
 
     def reanalyze(self) -> PanelAnalysis:
@@ -80,15 +77,17 @@ class Session:
         return self.analysis
 
     def set_decisions(self, decisions: Decisions) -> PanelAnalysis:
-        old_panel_source = self.decisions.single_board.panel_source if self.decisions.single_board else None
-        self.decisions = decisions
-        new_panel_source = decisions.single_board.panel_source if decisions.single_board else None
-        if new_panel_source != old_panel_source:
-            self._load_panel_job()
-        if decisions.bom_path and (self.bom is None or self.bom.path != decisions.bom_path):
-            self._load_bom(decisions.bom_path)
-        elif not decisions.bom_path:
-            self.bom = None
+        """Apply new decisions.  Inputs they name (BOM, panel export) are loaded first, so a
+        file that cannot be read leaves the session unchanged."""
+        bom = self.bom
+        if not decisions.bom_path:
+            bom = None
+        elif bom is None or bom.path != decisions.bom_path:
+            bom = read_bom(decisions.bom_path)
+        panel_job = self.panel_job
+        if self._panel_source(decisions) != self._panel_source(self.decisions):
+            panel_job = self._panel_job_for(decisions)
+        self.decisions, self.bom, self.panel_job = decisions, bom, panel_job
         return self.reanalyze()
 
     def update(self, **changes) -> PanelAnalysis:
@@ -98,12 +97,13 @@ class Session:
         self.settings = settings
         return self.reanalyze() if self.job else None
 
-    def _load_bom(self, path: str) -> None:
-        self.bom = read_bom(path)
+    @staticmethod
+    def _panel_source(decisions: Decisions) -> str | None:
+        return decisions.single_board.panel_source if decisions.single_board else None
 
-    def _load_panel_job(self) -> None:
-        sb = self.decisions.single_board
-        self.panel_job = OdbJob(sb.panel_source) if sb and sb.panel_source else None
+    def _panel_job_for(self, decisions: Decisions) -> OdbJob | None:
+        source = self._panel_source(decisions)
+        return OdbJob(source) if source else None
 
     # ------------------------------------------------------------------ project
     def save(self, path: str | os.PathLike) -> PanelProject:
@@ -154,7 +154,7 @@ class Session:
         self.job = OdbJob(src)
         self.decisions = decisions
         self.bom = None
-        self._load_panel_job()
+        self.panel_job = self._panel_job_for(decisions)
         self.reanalyze()
         if issue is None and self.analysis is not None:
             rebuilt = self.analysis.to_project(path)

@@ -74,13 +74,13 @@ def from_jsonable(tp: Any, data: Any, path: str = "$") -> Any:
                 raise SerializationError(f"{path}: missing key '{f.name}'")
         return tp(**kwargs)
 
-    if origin in (list, typing.List):
+    if origin is list:
         if not isinstance(data, list):
             raise SerializationError(f"{path}: expected a list")
         (item_tp,) = args or (Any,)
         return [from_jsonable(item_tp, v, f"{path}[{i}]") for i, v in enumerate(data)]
 
-    if origin in (tuple, typing.Tuple):
+    if origin is tuple:
         if not isinstance(data, list):
             raise SerializationError(f"{path}: expected a list")
         if len(args) == 2 and args[1] is Ellipsis:
@@ -89,7 +89,7 @@ def from_jsonable(tp: Any, data: Any, path: str = "$") -> Any:
             raise SerializationError(f"{path}: expected {len(args)} items")
         return tuple(from_jsonable(a, v, f"{path}[{i}]") for i, (a, v) in enumerate(zip(args, data)))
 
-    if origin in (dict, typing.Dict):
+    if origin is dict:
         if not isinstance(data, dict):
             raise SerializationError(f"{path}: expected an object")
         _key_tp, val_tp = args or (str, Any)

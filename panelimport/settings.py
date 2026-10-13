@@ -90,7 +90,7 @@ class Settings:
         return to_jsonable(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Settings":
+    def from_dict(cls, data: dict) -> Settings:
         settings = from_jsonable(cls, data)
         problems = settings.validate()
         if problems:
@@ -98,7 +98,7 @@ class Settings:
         return settings
 
     @classmethod
-    def load(cls, path: str | os.PathLike | None = None) -> "Settings":
+    def load(cls, path: str | os.PathLike | None = None) -> Settings:
         """Load settings; a missing file gives the defaults."""
         path = Path(path) if path else default_settings_path()
         if not path.exists():

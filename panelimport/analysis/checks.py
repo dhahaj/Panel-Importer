@@ -265,7 +265,7 @@ def crosscheck(
         used: set[int] = set()
         for e in exps:
             best = None
-            for k, (x, y, rot, _w) in enumerate(found):
+            for k, (x, y, _rot, _w) in enumerate(found):
                 if k in used:
                     continue
                 d = math.hypot(x - e.x, y - e.y)
