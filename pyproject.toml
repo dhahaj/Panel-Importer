@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panelimport"
+version = "0.1.0"
+description = "Imports an Altium panel exported as ODB++ and identifies circuits, placements and fiducials (Phase 1 of the CircuitCAM replacement)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "shapely>=2.0",
+    "unlzw3>=0.2.2",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8", "PySide6>=6.6", "pyinstaller>=6.6"]
+
+[project.scripts]
+panelimport = "panelimport.cli:main"
+
+[project.gui-scripts]
+panelimport-gui = "panelimport.app:main"
+
+[tool.setuptools.packages.find]
+include = ["panelimport*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "gui: tests that need PySide6 (run offscreen)",
+    "slow: performance tests",
+]
