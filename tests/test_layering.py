@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1] / "panelimport"
-QT_FREE = [PKG / "io", PKG / "analysis", PKG / "model", PKG / "settings.py", PKG / "session.py", PKG / "report.py", PKG / "cli.py"]
+QT_FREE = [PKG / "io", PKG / "analysis", PKG / "model", PKG / "settings.py", PKG / "session.py", PKG / "report.py", PKG / "components_csv.py", PKG / "cli.py"]
 
 
 def _imports(path: Path) -> set[str]:

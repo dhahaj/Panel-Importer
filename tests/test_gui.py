@@ -156,6 +156,56 @@ def test_confirm_save_and_reopen(window, tmp_path, app, monkeypatch):
     assert [f.name for f in window.analysis.fiducials] == ["FID1", "FID2", "FID3"]
 
 
+def test_export_components_csv(window, tmp_path, app, boxes, monkeypatch):
+    import csv
+
+    from panelimport.gui.panels.components import COLUMNS, NUMERIC
+
+    asked = []
+
+    def dialog(parent, title, default, *args, **kwargs):
+        asked.append(default)
+        return str(tmp_path / "out" / "parts"), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", dialog)
+    assert not window.act_export_components.isEnabled()
+    src = open_panel(window, tmp_path, app)
+    window.components_panel.search.setText("C1")  # the file has every component, not only the rows shown
+    assert window.act_export_components.isEnabled()
+    window.act_export_components.trigger()
+    assert asked == [str(src.with_name("Panel_ODB.components.csv"))]
+    assert boxes and boxes[-1][:2] == ("warning", "Export components")  # the folder does not exist
+    (tmp_path / "out").mkdir()
+    window.act_export_components.trigger()
+    assert window.statusBar().currentMessage() == f"Exported 23 components to {tmp_path / 'out' / 'parts'}.csv"
+    with open(tmp_path / "out" / "parts.csv", newline="", encoding="utf-8-sig") as fh:
+        rows = list(csv.reader(fh))
+    assert rows[0] == COLUMNS and len(rows) == 24
+    # Each row is the table's row; numbers are not cut to the three decimals shown.
+    model = window.components_panel.model
+    table = {model.index(r, 0).data(): [model.index(r, c).data() for c in range(len(COLUMNS))] for r in range(model.rowCount())}
+    for row in rows[1:]:
+        shown = table[row[0]]
+        for col, (cell, text) in enumerate(zip(row, shown)):
+            assert (f"{float(cell):.3f}" if col in NUMERIC else cell) == text
+
+
+def test_export_components_from_a_project_without_its_source(window, tmp_path, app, monkeypatch):
+    src = open_panel(window, tmp_path, app)
+    window.confirm_panel()
+    target = tmp_path / "Saved.panel.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    window.save_project()
+    src.unlink()
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(target), ""))
+    window.open_project()
+    assert window.controller.read_only and window.act_export_components.isEnabled()
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda parent, title, default, *a, **k: (default, ""))
+    window.act_export_components.trigger()
+    exported = tmp_path / "Saved.components.csv"  # named after the project
+    assert len(exported.read_text(encoding="utf-8-sig").splitlines()) == 24
+
+
 def test_measure_tool(window, tmp_path, app):
     open_panel(window, tmp_path, app)
     results = []

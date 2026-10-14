@@ -39,6 +39,21 @@ def test_analyze_json(tmp_path, capsys):
     assert len(data["circuits"]) == 6 and data["can_confirm"]
 
 
+def test_analyze_components_csv(tmp_path, capsys):
+    src = sr_panel().write_folder(tmp_path)
+    out = tmp_path / "parts.csv"
+    assert main(["analyze", str(src), "--components-csv", str(out)]) == 0
+    assert f"Components: 15 written to {out}" in capsys.readouterr().out
+    lines = out.read_text(encoding="utf-8-sig").splitlines()
+    assert lines[0].startswith("Designator,Level,Part name,") and len(lines) == 16
+    assert "C1,board,CAP-100N,,C0603,top,25,10,270,OK 0.000 mm," in lines
+    # With --json the output stays JSON; a file that cannot be written is an error.
+    assert main(["analyze", str(src), "--json", "--components-csv", str(out)]) == 0
+    assert json.loads(capsys.readouterr().out)["placements"] == 12
+    assert main(["analyze", str(src), "--components-csv", str(tmp_path / "nope" / "parts.csv")]) == 2
+    assert "parts.csv" in capsys.readouterr().err
+
+
 def test_bad_path(tmp_path, capsys):
     assert main(["analyze", str(tmp_path / "nope")]) == 2
     assert "does not exist" in capsys.readouterr().err
