@@ -148,11 +148,27 @@ class ComponentsPanel(QWidget):
         self.count.setWordWrap(True)
 
         # Edit actions: buttons, the table's context menu and keys while the table has focus.
-        self.act_add = self._action("Add…", "Add a component the export does not have", QKeySequence(Qt.Key_Insert), self.addRequested.emit)
-        self.act_edit = self._action("Edit…", "Change part name, part number, package, side, position or rotation", QKeySequence(Qt.Key_F2), lambda: self._emit(self.editRequested))
-        self.act_remove = self._action("Remove…", "Do not place the selected components (through-hole, not populated, …)", QKeySequence.Delete, lambda: self._emit(self.removeRequested))
-        self.act_restore = self._action("Restore", "Place the selected removed components again", None, lambda: self._emit(self.restoreRequested))
-        self.act_revert = self._action("Revert", "Back to the export's values for the selected components", None, lambda: self._emit(self.revertRequested))
+        self.act_add = self._action(
+            "Add…", "Add a component the export does not have", QKeySequence(Qt.Key_Insert), self.addRequested.emit
+        )
+        self.act_edit = self._action(
+            "Edit…",
+            "Change part name, part number, package, side, position or rotation",
+            QKeySequence(Qt.Key_F2),
+            lambda: self._emit(self.editRequested),
+        )
+        self.act_remove = self._action(
+            "Remove…",
+            "Do not place the selected components (through-hole, not populated, …)",
+            QKeySequence.Delete,
+            lambda: self._emit(self.removeRequested),
+        )
+        self.act_restore = self._action(
+            "Restore", "Place the selected removed components again", None, lambda: self._emit(self.restoreRequested)
+        )
+        self.act_revert = self._action(
+            "Revert", "Back to the export's values for the selected components", None, lambda: self._emit(self.revertRequested)
+        )
         self.suggest_menu = QMenu("Find", self)
         self.suggest_actions: dict[str, QAction] = {}
         for kind, label in SUGGESTIONS.items():

@@ -33,6 +33,9 @@ checks the ones present:
 * `placement_positions` are circuit-relative (the reference point is the lower-left of
   the board profile unless `settings` says otherwise).
 * Include at least one single-board export (`"mode": "single-board"`).
+* `decisions` are read like the project file, so they can hold component edits too,
+  e.g. to leave out what the machine does not place before counting `placements`:
+  `"component_edits": [{"designator": "J1", "removed": true, "reason": "through-hole"}]`.
 
 Run `panelimport analyze <export>` first: its output shows what to put in the file and
 which open questions the export answers. Real exports are ignored by `.gitignore`

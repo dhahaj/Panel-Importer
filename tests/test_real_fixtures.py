@@ -13,6 +13,7 @@ import pytest
 from panelimport.analysis.pipeline import analyze
 from panelimport.io.odb import OdbJob
 from panelimport.model.panel import Decisions
+from panelimport.model.serialize import from_jsonable
 from panelimport.settings import Settings
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -35,7 +36,7 @@ def _source(case: Path) -> Path:
 def test_real_panel(case):
     exp = json.loads((case / "expected.json").read_text())
     settings = Settings.from_dict(exp["settings"]) if "settings" in exp else Settings()
-    decisions = Decisions(**exp.get("decisions", {}))
+    decisions = from_jsonable(Decisions, exp.get("decisions", {}))  # strict, nested edits included
     a = analyze(OdbJob(_source(case)), settings, decisions)
     if "mode" in exp:
         assert a.mode == exp["mode"]
