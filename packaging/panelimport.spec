@@ -1,8 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller one-folder build:
+# PyInstaller one-folder build (Windows shown; on Linux the same names without .exe):
 #   dist/PanelImporter/PanelImporter.exe   GUI (no console window)
 #   dist/PanelImporter/panelimport.exe     command line: panelimport analyze <odb path>, panelimport iss <project>
 # Both share the libraries in the same folder; it runs without Python or admin rights.
+# The icon is used on Windows only; PyInstaller ignores it on Linux.
 #
 #   pyinstaller packaging/panelimport.spec --noconfirm
 

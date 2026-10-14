@@ -45,17 +45,31 @@ written), 2 = could not open. `panelimport iss-compare A B` options: `--toleranc
 (default 0.01), `--all` (every part, not only the ones that differ), `--angle-direction
 ccw|cw`. Exit code 0 = same placements, 1 = different, 2 = could not open.
 
-### Windows build (no Python needed on the target machine)
+### Windows and Linux builds (no Python needed on the target machine)
 
 ```bash
 pyinstaller packaging/panelimport.spec --noconfirm
 ```
 
 produces `dist/PanelImporter/` with `PanelImporter.exe` (GUI) and `panelimport.exe`
-(command line). Copy the whole folder; no installation or admin rights. The
-`build` GitHub Actions workflow builds this folder on `windows-latest`, runs both
-executables with Python removed from `PATH`, and uploads the folder as the
-`PanelImporter-windows` artifact.
+(command line); on Linux they are `PanelImporter` and `panelimport`. Copy the whole
+folder; no installation or admin rights. The `build` GitHub Actions workflow builds this
+folder on `windows-latest` (running both executables with Python removed from `PATH`)
+and on `ubuntu-22.04`, and uploads them as the `PanelImporter-windows` and
+`PanelImporter-linux` artifacts. The Linux build runs on distributions with glibc 2.35
+or newer; the GUI needs the usual X11/Wayland libraries (on Debian/Ubuntu,
+`libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libxcb-cursor0`).
+
+### Releases
+
+Pushing a tag `v<version>` that matches `panelimport.__version__` builds both bundles
+and publishes a GitHub release with `PanelImporter-<version>-windows-x64.zip`,
+`PanelImporter-<version>-linux-x64.tar.gz` and their SHA-256 sums. The tag's annotation
+becomes the release notes:
+
+```bash
+git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
+```
 
 ## Using the GUI
 
