@@ -5,6 +5,8 @@
 * Centroid and fiducial markers keep a constant pixel size; hovering shows details.
 * Measure tool: two clicks give ΔX, ΔY and the distance (snapping to markers).
 * "View from bottom" mirrors the display only.
+* Right-click asks the main window for a menu (edit, remove or add components);
+  double-clicking a component asks to edit it.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import math
 
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QTransform
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPathItem,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QStyleOptionGraphicsItem,
 )
 
+from panelimport.analysis.edits import status_text
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.gui import theme
 from panelimport.gui.geometry import LayerGeometry, build_layer_geometry, polygon_path, qtransform
@@ -66,13 +69,16 @@ class MarkerItem(QGraphicsItem):
     show_labels = False
     view_mirrored = False
 
-    def __init__(self, kind: str, key: tuple, color: QColor, label: str, rotation: float | None = None) -> None:
+    def __init__(
+        self, kind: str, key: tuple, color: QColor, label: str, rotation: float | None = None, state: str = ""
+    ) -> None:
         super().__init__()
         self.kind = kind  # "placement" | "panel_part" | "fiducial"
         self.key = key
         self.color = color
         self.label = label
         self.rotation_ccw = rotation
+        self.state = state  # "" | "edited" | "added" | "removed" (component edits)
         self.selected_number: int | None = None
         self.selectable_fiducial = True
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations)
@@ -116,14 +122,29 @@ class MarkerItem(QGraphicsItem):
                 f.setBold(True)
                 painter.setFont(f)
                 painter.drawText(QPointF(10, -8), str(self.selected_number))
+        elif self.state == "removed":  # not placed: a grey cross, no rotation
+            s = 3.5
+            painter.drawLine(QPointF(-s, -s), QPointF(s, s))
+            painter.drawLine(QPointF(-s, s), QPointF(s, -s))
         else:
             s = 4.0 if self.kind == "placement" else 5.0
             painter.drawLine(QPointF(-s, 0), QPointF(s, 0))
             painter.drawLine(QPointF(0, -s), QPointF(0, s))
-            if self.kind == "panel_part":
+            if self.state == "added":  # added by hand: a green diamond
+                d = s + 1.5
+                painter.setPen(QPen(theme.HIGHLIGHT if self.isSelected() else theme.ADDED, pen.widthF()))
+                painter.drawPolygon(QPolygonF([QPointF(0, -d), QPointF(d, 0), QPointF(0, d), QPointF(-d, 0)]))
+                painter.setPen(pen)
+            elif self.kind == "panel_part":
                 painter.drawRect(QRectF(-s, -s, 2 * s, 2 * s))
             else:
                 painter.drawEllipse(QPointF(0, 0), 2.2, 2.2)
+            if self.state == "edited":  # edited by hand: an amber centre
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QBrush(theme.EDITED))
+                painter.drawEllipse(QPointF(0, 0), 2.6, 2.6)
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(pen)
             if self.rotation_ccw is not None:
                 t = math.radians(self.rotation_ccw)
                 dx, dy = math.cos(t), -math.sin(t)  # device Y points down
@@ -131,7 +152,10 @@ class MarkerItem(QGraphicsItem):
                     dx = -dx
                 painter.drawLine(QPointF(0, 0), QPointF(dx * 7, dy * 7))
         if MarkerItem.show_labels or self.isSelected() or self._hover:
-            painter.setPen(QPen(theme.STYLE["labels"].color))
+            label_color = {"edited": theme.EDITED, "added": theme.ADDED, "removed": theme.REMOVED}.get(
+                self.state, theme.STYLE["labels"].color
+            )
+            painter.setPen(QPen(label_color))
             painter.drawText(QPointF(9, 4), self.label)
 
 
@@ -141,6 +165,9 @@ class PanelCanvas(QGraphicsView):
     itemPicked = Signal(str, object)  # kind, key
     selectionCleared = Signal()
     zoomChanged = Signal(float)
+    # (kind, key) of the component under the cursor or None, panel x, y, global position
+    contextRequested = Signal(object, float, float, object)
+    editRequested = Signal(object)  # (kind, key) of a double-clicked component
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -283,22 +310,35 @@ class PanelCanvas(QGraphicsView):
             for p in a.placements:
                 x, y, rot = a.circuit_position(p, c)
                 layer = "centroids_top" if p.layer == "top" else "centroids_bottom"
-                m = MarkerItem("placement", (p.designator, c.index), theme.STYLE[layer].color, p.designator, rot)
+                m = MarkerItem("placement", (p.designator, c.index), theme.STYLE[layer].color, p.designator, rot, p.state)
                 m.setPos(x, y)
                 m.setToolTip(self._placement_tip(a, p, c, x, y, rot))
                 self._add(layer, m)
                 self._markers.append(m)
                 snap.append((x, y))
-        for pp in a.panel_parts:
-            m = MarkerItem("panel_part", (pp.designator,), theme.STYLE["panel_parts"].color, pp.designator, pp.rotation)
+            for p in a.removed_placements:
+                x, y, rot = a.circuit_position(p, c)
+                m = MarkerItem("placement", (p.designator, c.index), theme.STYLE["removed"].color, p.designator, None, "removed")
+                m.setPos(x, y)
+                m.setToolTip(self._placement_tip(a, p, c, x, y, rot))
+                self._add("removed", m)
+                self._markers.append(m)
+        for pp in [*a.panel_parts, *a.removed_panel_parts]:
+            removed = pp.state == "removed"
+            color = theme.STYLE["removed" if removed else "panel_parts"].color
+            m = MarkerItem("panel_part", (pp.designator,), color, pp.designator, None if removed else pp.rotation, pp.state)
             m.setPos(pp.x, pp.y)
+            status = status_text(pp)
+            pn = f"<br>Part number {pp.part_number}" if pp.part_number else ""
             m.setToolTip(
-                f"<b>{pp.designator}</b> — panel-level part<br>{pp.part_name}<br>Layer {pp.layer}<br>"
+                f"<b>{pp.designator}</b> — panel-level part<br>{pp.part_name}{pn}<br>Layer {pp.layer}<br>"
                 f"Rotation {pp.rotation:.3f}° (raw {pp.rotation_raw:.3f}° CW)<br>Panel X {pp.x:.3f} Y {pp.y:.3f}"
+                + (f"<br><i>{status}</i>" if status else "")
             )
-            self._add("panel_parts", m)
+            self._add("removed" if removed else "panel_parts", m)
             self._markers.append(m)
-            snap.append((pp.x, pp.y))
+            if not removed:
+                snap.append((pp.x, pp.y))
 
         # Fiducials
         chosen = {f.name: i + 1 for i, f in enumerate(a.fiducials)}
@@ -332,11 +372,13 @@ class PanelCanvas(QGraphicsView):
     def _placement_tip(a: PanelAnalysis, p, c, x: float, y: float, rot: float) -> str:
         rx, ry = a.reference_board
         pn = f"<br>Part number {p.part_number}" if p.part_number else ""
+        status = status_text(p)
         return (
             f"<b>{p.designator}</b> — {p.part_name}{pn}<br>Package {p.package or '?'} · {p.layer}"
             f"<br>Rotation {p.rotation:.3f}° (raw {p.rotation_raw:.3f}° CW)"
             f"<br>Panel X {x:.3f}  Y {y:.3f}"
             f"<br>Circuit {c.index}: X {p.x - rx:.3f}  Y {p.y - ry:.3f}"
+            + (f"<br><i>{status}</i>" if status else "")
         )
 
     def _content_rect(self) -> QRectF:
@@ -418,16 +460,19 @@ class PanelCanvas(QGraphicsView):
         item = items[0]
         self.itemPicked.emit(item.kind, item.key)
 
-    def select_designator(self, designator: str, circuit: int | None = None, center: bool = False) -> None:
+    def select_designator(
+        self, designator: str, circuit: int | None = None, center: bool = False, level: str | None = None
+    ) -> None:
+        """Select a component's markers (``level`` "board", "panel" or None for both)."""
         self._suppress_selection = True
         self.scene().clearSelection()
         target = None
         for m in self._markers:
-            if m.kind == "placement" and m.key[0] == designator:
+            if m.kind == "placement" and m.key[0] == designator and level != "panel":
                 m.setSelected(True)
                 if circuit is None or m.key[1] == circuit:
                     target = target or m
-            elif m.kind == "panel_part" and m.key[0] == designator:
+            elif m.kind == "panel_part" and m.key[0] == designator and level != "board":
                 m.setSelected(True)
                 target = target or m
         self._suppress_selection = False
@@ -552,6 +597,30 @@ class PanelCanvas(QGraphicsView):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        item = self.itemAt(event.position().toPoint())
+        if (
+            event.button() == Qt.LeftButton
+            and not self._measure
+            and isinstance(item, MarkerItem)
+            and item.kind in ("placement", "panel_part")
+        ):
+            self.editRequested.emit((item.kind, item.key))
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        if self.analysis is None:
+            return
+        item = self.itemAt(event.pos())
+        key = None
+        if isinstance(item, MarkerItem) and item.kind in ("placement", "panel_part"):
+            key = (item.kind, item.key)
+        p = self.mapToScene(event.pos())
+        self.contextRequested.emit(key, p.x(), p.y(), event.globalPos())
+        event.accept()
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_F:

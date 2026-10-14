@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 
@@ -22,7 +22,9 @@ from panelimport.model.panel import (
     Acknowledgement,
     Circuit,
     CircuitReference,
+    ComponentEdit,
     Decisions,
+    EditFrame,
     Fiducial,
     Grid,
     Numbering,
@@ -41,6 +43,11 @@ ROUND = 6  # decimals kept in the project file (1 nm, 1 µ°)
 def r6(v: float) -> float:
     out = round(float(v), ROUND)
     return 0.0 if out == 0 else out
+
+
+def angle6(v: float) -> float:
+    """An angle rounded like r6 and kept in [0, 360)."""
+    return r6(norm_angle(r6(v)))
 
 
 def normalize_outline(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -101,6 +108,14 @@ class PlacementInfo:
     body: list[list[tuple[float, float]]] = field(default_factory=list)  # board frame
     paste: PasteResult | None = None
     written: str = ""  # designator as written in the export
+    state: str = ""  # "" as exported | "edited" | "added" | "removed"
+    export: dict[str, object] = field(default_factory=dict)  # export values of the fields an edit changed
+    edit: ComponentEdit | None = None
+
+    @property
+    def moved(self) -> bool:
+        """Placed somewhere other than the export says (added, or position/rotation/side edited)."""
+        return self.state == "added" or any(k in self.export for k in ("x", "y", "rotation", "layer"))
 
 
 @dataclass
@@ -114,6 +129,11 @@ class PanelPartInfo:
     rotation: float  # CCW
     rotation_raw: float
     step: str
+    part_number: str = ""
+    attributes: dict[str, str] = field(default_factory=dict)
+    state: str = ""  # as PlacementInfo.state
+    export: dict[str, object] = field(default_factory=dict)
+    edit: ComponentEdit | None = None
 
 
 @dataclass
@@ -163,8 +183,11 @@ class PanelAnalysis:
     circuits: list[CircuitInfo] = field(default_factory=list)
     grid: GridInfo | None = None
     grid_source: str = ""
-    placements: list[PlacementInfo] = field(default_factory=list)
-    panel_parts: list[PanelPartInfo] = field(default_factory=list)
+    placements: list[PlacementInfo] = field(default_factory=list)  # what is placed per circuit
+    panel_parts: list[PanelPartInfo] = field(default_factory=list)  # what is placed once
+    removed_placements: list[PlacementInfo] = field(default_factory=list)  # removed by an edit
+    removed_panel_parts: list[PanelPartInfo] = field(default_factory=list)
+    component_edits: list[ComponentEdit] = field(default_factory=list)  # in this analysis's frame
     instances: list[StepInstanceInfo] = field(default_factory=list)
     fiducial_candidates: list[FiducialCandidate] = field(default_factory=list)
     fiducials: list[FiducialCandidate] = field(default_factory=list)
@@ -238,6 +261,18 @@ class PanelAnalysis:
         if not g.uniform and n > 1:
             text += ", non-uniform"
         return text
+
+    @property
+    def edit_frame(self) -> EditFrame:
+        """The frame this analysis expresses component-edit coordinates in."""
+        manual = self.mode == "single-board" and self.decisions.single_board is not None
+        return EditFrame(
+            mode=self.mode,
+            reference=self.reference_kind,
+            first=self.numbering.first,
+            order=self.numbering.order,
+            panel_origin="manual" if manual else self.settings.panel_origin,
+        )
 
     # ------------------------------------------------------------------ geometry
     def layer_draws(self) -> list[LayerDraw]:
@@ -365,12 +400,14 @@ class PanelAnalysis:
                     y=r6(p.y),
                     layer=p.layer,
                     part_name=p.part_name,
+                    part_number=p.part_number,
                     package=p.package,
                     rotation=r6(p.rotation),
                     rotation_raw=r6(p.rotation_raw),
                 )
                 for p in self.panel_parts
             ],
+            component_edits=[rounded_edit(e) for e in self.component_edits],
             fiducials=[
                 Fiducial(
                     name=f.name,
@@ -391,6 +428,16 @@ class PanelAnalysis:
             single_board=self.decisions.single_board,
             settings=self.settings,
         )
+
+
+def rounded_edit(e: ComponentEdit) -> ComponentEdit:
+    """An edit with its numbers rounded like the rest of the project."""
+    return replace(
+        e,
+        x=None if e.x is None else r6(e.x),
+        y=None if e.y is None else r6(e.y),
+        rotation=None if e.rotation is None else angle6(e.rotation),
+    )
 
 
 def relative_source_path(source: str | os.PathLike, project: Path) -> str:

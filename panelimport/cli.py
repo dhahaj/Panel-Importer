@@ -12,6 +12,7 @@ import logging
 import sys
 
 from panelimport import __version__
+from panelimport.analysis.edits import edits_summary
 from panelimport.io.bom import BomError
 from panelimport.io.odb import OdbOpenError
 from panelimport.model.panel import Decisions
@@ -98,6 +99,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     project = load_project(args.project)
     src, issue = check_source(project, args.project)
     print(f"Project: {args.project} ({project.mode}, {len(project.circuits)} circuits, {len(project.placements)} placements)")
+    if project.component_edits:
+        print(f"Edits:   {edits_summary(project.component_edits)}")
     print(f"Source:  {src}")
     if issue is not None:
         print(f"  {issue.format()}")

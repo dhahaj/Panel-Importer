@@ -6,6 +6,7 @@ issue messages.
 
 from __future__ import annotations
 
+from panelimport.analysis.edits import edits_summary, status_text
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.analysis.roles import ROLE_LABELS
 
@@ -48,15 +49,20 @@ def format_report(a: PanelAnalysis, *, verbose: bool = False) -> str:
             "Panel fiducials: "
             + ", ".join(f"{f.name} ({f.x:.3f}, {f.y:.3f}; {'+'.join(f.sources)})" for f in panel_fids)
         )
+    edits = edits_summary(a.component_edits)
+    if edits:
+        lines.append(f"Component edits: {edits}")
     if verbose and a.placements:
         lines.append("")
         lines.append("  designator   part             package        side      X         Y      rot   paste")
         ref_x, ref_y = a.reference_board
         for p in a.placements:
             paste = p.paste.describe() if p.paste else "-"
+            status = status_text(p)
             lines.append(
                 f"  {p.designator:<12} {p.part_name[:16]:<16} {p.package[:14]:<14} {p.layer:<6} "
                 f"{p.x - ref_x:9.3f} {p.y - ref_y:9.3f} {p.rotation:6.1f}  {paste}"
+                + (f"  [{status}]" if status else "")
             )
     counts = a.issue_counts()
     lines.append("")

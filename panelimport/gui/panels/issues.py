@@ -27,6 +27,7 @@ class IssuesPanel(QWidget):
     acknowledgeRequested = Signal(list)
     unacknowledgeRequested = Signal(list)
     panelLevelRequested = Signal(list)
+    removePartsRequested = Signal(list)  # issues naming components to remove
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -51,6 +52,8 @@ class IssuesPanel(QWidget):
         self.ack_btn = QPushButton("Acknowledge")
         self.unack_btn = QPushButton("Un-acknowledge")
         self.panel_btn = QPushButton("Confirm as panel-level")
+        self.remove_btn = QPushButton("Remove part…")
+        self.remove_btn.setToolTip("Do not place the components these issues name (e.g. through-hole or not populated)")
         self.ack_btn.setToolTip("Warnings must be acknowledged before the panel can be confirmed")
         self.panel_btn.setToolTip("For designators whose copy count differs from N: they are fiducials, tooling or other panel parts")
         self.ack_btn.clicked.connect(lambda: self.acknowledgeRequested.emit(self._selected(lambda i: not i.is_error)))
@@ -60,6 +63,7 @@ class IssuesPanel(QWidget):
                 sorted({i.designator for i in self._selected(lambda i: i.code == "copy_count") if i.designator})
             )
         )
+        self.remove_btn.clicked.connect(lambda: self.removePartsRequested.emit(self._selected(self._names_part)))
         top = QHBoxLayout()
         for cb in self.filters.values():
             top.addWidget(cb)
@@ -67,6 +71,7 @@ class IssuesPanel(QWidget):
         top.addWidget(self.ack_btn)
         top.addWidget(self.unack_btn)
         top.addWidget(self.panel_btn)
+        top.addWidget(self.remove_btn)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addLayout(top)
@@ -122,6 +127,13 @@ class IssuesPanel(QWidget):
         if 0 <= index.row() < len(self._rows):
             self.issueActivated.emit(self._rows[index.row()])
 
+    def _names_part(self, issue: Issue) -> bool:
+        """Whether the issue names a component that is placed."""
+        a = self.analysis
+        if a is None or not issue.designator:
+            return False
+        return any(p.designator == issue.designator for p in [*a.placements, *a.panel_parts])
+
     def _update_buttons(self, *args) -> None:
         sel = self._selected() if self._rows else []
         a = self.analysis
@@ -129,3 +141,4 @@ class IssuesPanel(QWidget):
         self.ack_btn.setEnabled(editable and any(not i.is_error and not a.is_acknowledged(i) for i in sel))
         self.unack_btn.setEnabled(editable and any(not i.is_error and a.is_acknowledged(i) for i in sel))
         self.panel_btn.setEnabled(editable and any(i.code == "copy_count" for i in sel))
+        self.remove_btn.setEnabled(editable and any(self._names_part(i) for i in sel))

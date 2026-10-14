@@ -1,5 +1,6 @@
 """Offscreen GUI tests: the GUI shows what the CLI prints, selection sync, fiducials,
-undo, confirm/save, reopen and canvas performance."""
+undo, confirm/save, reopen and canvas performance.  Fixtures (app, boxes, window) are in
+conftest.py."""
 
 from __future__ import annotations
 
@@ -11,62 +12,15 @@ pytest.importorskip("PySide6")
 pytestmark = pytest.mark.gui
 
 from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtWidgets import QFileDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QFileDialog  # noqa: E402
 
 from panelimport.analysis.pipeline import analyze  # noqa: E402
 from panelimport.io.odb import OdbJob  # noqa: E402
 from panelimport.model.panel import Decisions  # noqa: E402
 from panelimport.model.project_file import load_project  # noqa: E402
 from panelimport.settings import Settings  # noqa: E402
+from tests.conftest import open_panel  # noqa: E402
 from tests.synthetic.odbgen import add_copper, sr_panel  # noqa: E402
-
-
-@pytest.fixture(scope="module")
-def app():
-    from panelimport.app import create_app
-
-    return create_app([])
-
-
-@pytest.fixture
-def boxes(monkeypatch):
-    """Record message boxes instead of blocking on them."""
-    seen = []
-
-    def make(kind, answer=QMessageBox.Yes):
-        def box(parent, title, text, *args, **kwargs):
-            seen.append((kind, title, text))
-            return answer
-
-        return box
-
-    monkeypatch.setattr(QMessageBox, "warning", make("warning", QMessageBox.Ok))
-    monkeypatch.setattr(QMessageBox, "information", make("information", QMessageBox.Ok))
-    monkeypatch.setattr(QMessageBox, "question", make("question"))
-    return seen
-
-
-@pytest.fixture
-def window(app, tmp_path, boxes):
-    from panelimport.gui.main_window import MainWindow
-
-    w = MainWindow(Settings(), QSettings(str(tmp_path / "gui.ini"), QSettings.IniFormat))
-    w.resize(1400, 900)
-    w.show()
-    app.processEvents()
-    yield w
-    from panelimport.app import dispose
-
-    w.controller.undo_stack.setClean()
-    dispose(w)
-
-
-def open_panel(window, tmp_path, app, job=None):
-    job = job or sr_panel(n_parts=20)
-    src = job.write_tgz(tmp_path / "Panel_ODB.tgz")
-    window.open_job(OdbJob(src), Decisions())
-    app.processEvents()
-    return src
 
 
 def test_gui_shows_the_cli_summary_and_issues(window, tmp_path, app):
@@ -76,7 +30,10 @@ def test_gui_shows_the_cli_summary_and_issues(window, tmp_path, app):
     shown = [window.issues_panel.issue_at(r).format() for r in range(window.issues_panel.model.rowCount())]
     assert shown == [i.format() for i in a.issues]
     assert window.circuits_panel.table.rowCount() == 6
-    assert window.components_panel.proxy.rowCount() == 20
+    panel = window.components_panel
+    assert panel.proxy.rowCount() == 23  # 20 placements + 3 panel-level fiducials
+    panel.show_filter.setCurrentIndex(panel.show_filter.findData("board"))
+    assert panel.proxy.rowCount() == 20
     assert window.summary.confirm_btn.isEnabled()
     assert not window.act_save.isEnabled()
 
@@ -97,6 +54,10 @@ def test_selection_sync_canvas_and_table(window, tmp_path, app):
 
 
 def test_components_table_filters_and_sorts_numerically(window, tmp_path, app):
+    from PySide6.QtCore import Qt
+
+    from panelimport.gui.panels.components import COL_SIDE, COL_X
+
     open_panel(window, tmp_path, app, sr_panel(n_parts=30))
     panel = window.components_panel
     panel.search.setText("C1")
@@ -104,12 +65,10 @@ def test_components_table_filters_and_sorts_numerically(window, tmp_path, app):
     assert "C1" in names and "U1" not in names
     panel.search.setText("")
     panel.side.setCurrentText("bottom")
-    assert {panel.proxy.index(r, 4).data() for r in range(panel.proxy.rowCount())} == {"bottom"}
+    assert {panel.proxy.index(r, COL_SIDE).data() for r in range(panel.proxy.rowCount())} == {"bottom"}
     panel.side.setCurrentText("all")
-    from PySide6.QtCore import Qt
-
-    panel.table.sortByColumn(5, Qt.AscendingOrder)
-    xs = [panel.proxy.index(r, 5).data(panel.proxy.sortRole()) for r in range(panel.proxy.rowCount())]
+    panel.table.sortByColumn(COL_X, Qt.AscendingOrder)
+    xs = [panel.proxy.index(r, COL_X).data(panel.proxy.sortRole()) for r in range(panel.proxy.rowCount())]
     assert xs == sorted(xs)
 
 

@@ -8,11 +8,16 @@ panel frame, whose origin is described by :class:`PanelOrigin`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from panelimport.settings import Settings
 
 PROJECT_FORMAT = "panel-project"
-PROJECT_VERSION = 1
+PROJECT_VERSION = 2  # 2: component_edits, panel_parts[].part_number
+READABLE_VERSIONS = (1, 2)
+
+#: Why a component is not placed.
+REMOVAL_REASONS = ("through-hole", "not-populated", "mechanical", "other")
 
 
 @dataclass
@@ -99,6 +104,7 @@ class PanelPart:
     y: float = 0.0
     layer: str = "top"
     part_name: str = ""
+    part_number: str = ""
     package: str = ""
     rotation: float = 0.0
     rotation_raw: float = 0.0
@@ -128,6 +134,67 @@ class Acknowledgement:
     @classmethod
     def of(cls, issue) -> Acknowledgement:
         return cls(issue.code, issue.designator, issue.circuit, issue.subject)
+
+
+@dataclass(frozen=True)
+class ComponentEdit:
+    """A user change to one component.  The export is never changed; edits are stored
+    with the project and re-applied when it is reopened.
+
+    * ``removed`` — the component is not placed (it still exists: a removed ``FID1`` is
+      still a fiducial candidate).  ``reason`` says why.
+    * ``added`` — a component the export does not have; every field below applies.
+    * otherwise the fields that are not None override the export's values.
+
+    ``level`` "board" components are placed in every circuit and their x/y are
+    circuit-relative, like ``placements``; "panel" components are placed once and their
+    x/y are in the panel frame, like ``panel_parts``.  Rotation is CCW degrees.
+    """
+
+    designator: str = ""
+    level: Literal["board", "panel"] = "board"
+    added: bool = False
+    removed: bool = False
+    reason: Literal["", "through-hole", "not-populated", "mechanical", "other"] = ""
+    note: str = ""
+    part_name: str | None = None
+    part_number: str | None = None
+    package: str | None = None
+    layer: Literal["top", "bottom"] | None = None
+    x: float | None = None
+    y: float | None = None
+    rotation: float | None = None
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.level, self.designator)
+
+    @property
+    def overrides(self) -> dict[str, object]:
+        """The fields this edit sets (all of them for an added component)."""
+        return {f: getattr(self, f) for f in EDIT_FIELDS if getattr(self, f) is not None}
+
+    @property
+    def moves(self) -> bool:
+        return any(getattr(self, f) is not None for f in ("x", "y", "rotation", "layer"))
+
+
+#: Component fields an edit can set, in display order.
+EDIT_FIELDS = ("part_name", "part_number", "package", "layer", "x", "y", "rotation")
+
+
+@dataclass(frozen=True)
+class EditFrame:
+    """What component-edit coordinates were relative to when they were entered: the
+    panel structure, the circuit reference, the numbering (which picks circuit 1 on a
+    flattened panel) and the panel origin.  The analysis converts edits made in another
+    frame, so changing the reference or the numbering never moves an edited part."""
+
+    mode: str = "panel"
+    reference: str = "profile-lower-left"
+    first: str = "lower-left"
+    order: str = "row-major"
+    panel_origin: str = "profile-lower-left"
 
 
 @dataclass
@@ -174,6 +241,8 @@ class Decisions:
     panel_level: list[str] = field(default_factory=list)
     single_board: SingleBoardSetup | None = None
     bom_path: str | None = None
+    component_edits: list[ComponentEdit] = field(default_factory=list)
+    edit_frame: EditFrame | None = None  # None: the frame of the analysis itself
     confirmed: bool = False
 
 
@@ -194,6 +263,8 @@ class PanelProject:
     part_number_attribute: str = ""
     placements: list[Placement] = field(default_factory=list)
     panel_parts: list[PanelPart] = field(default_factory=list)
+    # What the user removed, added or changed (already applied to the lists above).
+    component_edits: list[ComponentEdit] = field(default_factory=list)
     fiducials: list[Fiducial] = field(default_factory=list)
     acknowledged_warnings: list[Acknowledgement] = field(default_factory=list)
     layer_roles: dict[str, str] = field(default_factory=dict)

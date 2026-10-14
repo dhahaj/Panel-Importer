@@ -37,6 +37,7 @@ LAYERS: list[LayerStyle] = [
     LayerStyle("centroids_top", "Centroids (top)", _c("#00e5ff"), True, 30),
     LayerStyle("centroids_bottom", "Centroids (bottom)", _c("#ff5fd2"), True, 29),
     LayerStyle("panel_parts", "Panel-level parts", _c("#a6ff00"), True, 31),
+    LayerStyle("removed", "Removed components (not placed)", _c("#8b949e"), True, 28),
     LayerStyle("labels", "Designator labels (when zoomed in)", _c("#e6edf3"), True, 32),
     LayerStyle("fiducials", "Fiducials", _c("#ffb000"), True, 40),
 ]
@@ -49,3 +50,8 @@ MEASURE = _c("#d4ff4f")
 ISSUE_MARK = _c("#ff453a")
 
 SEVERITY_COLOR = {"error": _c("#ff453a"), "warning": _c("#ffb000"), "info": _c("#58a6ff")}
+
+# Components table: what the user changed.
+EDITED = _c("#ffb000")
+ADDED = _c("#3fb950")
+REMOVED = _c("#8b949e")

@@ -84,9 +84,30 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
     ]
     a.attribute_keys = sorted({k for p in a.placements for k in p.attributes})
     a.panel_parts = [
-        PanelPartInfo(p.designator, p.part_name, p.package, p.layer, p.x, p.y, p.rotation, norm_angle(p.rotation_raw), "")
+        PanelPartInfo(
+            p.designator,
+            p.part_name,
+            p.package,
+            p.layer,
+            p.x,
+            p.y,
+            p.rotation,
+            norm_angle(p.rotation_raw),
+            "",
+            part_number=p.part_number,
+        )
         for p in project.panel_parts
     ]
+    # Edits are already applied to the saved lists; mark what they touched.  (Removed parts
+    # are not in the saved lists, and the export values are not known without the export.)
+    a.component_edits = list(project.component_edits)
+    edits = {e.key: e for e in project.component_edits}
+    for level, parts in (("board", a.placements), ("panel", a.panel_parts)):
+        for part in parts:
+            e = edits.get((level, part.designator))
+            if e is not None:
+                part.edit = e
+                part.state = "added" if e.added else ("edited" if e.overrides else "")
     a.fiducial_candidates = [
         FiducialCandidate(f.name, f.x, f.y, f.layer, "panel", [f.source], None, f.diameter) for f in project.fiducials
     ]

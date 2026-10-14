@@ -1,6 +1,6 @@
 """Main window: canvas in the centre, layers and tables on the left, inspector on the
 right, issues along the bottom.  Workflow: import → detection → review issues →
-confirm panel → pick fiducials → save project.
+confirm panel → pick fiducials → (add, edit or remove components) → save project.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QTabWidget,
     QToolBar,
@@ -22,9 +23,11 @@ from PySide6.QtWidgets import (
 )
 
 from panelimport import __version__
+from panelimport.analysis import edits
 from panelimport.analysis.fiducials import MAX_PANEL_FIDUCIALS
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.gui.canvas import PanelCanvas
+from panelimport.gui.component_dialog import ComponentDialog, RemoveDialog
 from panelimport.gui.controller import Controller
 from panelimport.gui.import_dialog import ImportDialog
 from panelimport.gui.panels.circuits import CircuitsPanel
@@ -137,6 +140,15 @@ class MainWindow(QMainWindow):
         self.act_bottom = self._action("View from &bottom", self.canvas.set_view_from_bottom, "B", checkable=True)
         self.act_measure = self._action("&Measure", self._toggle_measure, "M", checkable=True, tip="Two clicks give ΔX, ΔY and distance")
         self.act_confirm = self._action("&Confirm panel", self.confirm_panel, "Ctrl+Return")
+        self.act_add_component = self._action(
+            "&Add component…", lambda: self.add_component(), tip="Add a component the export does not have"
+        )
+        self.suggest_menu = QMenu("Remove &suggested components", self)
+        self.suggest_actions: dict[str, QAction] = {}
+        for kind, label in edits.SUGGESTIONS.items():
+            act = self.suggest_menu.addAction(label + "…")
+            act.triggered.connect(lambda _c=False, k=kind: self.suggest_removals(k))
+            self.suggest_actions[kind] = act
         self.act_reset_layout = self._action("Reset window layout", self.reset_layout)
         self.act_about = self._action("&About", self.about)
 
@@ -144,8 +156,11 @@ class MainWindow(QMainWindow):
         for a in (self.act_import, self.act_open, None, self.act_save, self.act_save_as, None, self.act_bom, None, self.act_quit):
             m.addSeparator() if a is None else m.addAction(a)
         m = self.menuBar().addMenu("&Edit")
-        for a in (self.act_undo, self.act_redo, None, self.act_roles, self.act_confirm, None, self.act_settings):
+        for a in (self.act_undo, self.act_redo, None, self.act_roles, self.act_confirm, None, self.act_add_component):
             m.addSeparator() if a is None else m.addAction(a)
+        m.addMenu(self.suggest_menu)
+        m.addSeparator()
+        m.addAction(self.act_settings)
         m = self.menuBar().addMenu("&View")
         for a in (self.act_fit, self.act_bottom, self.act_measure, None, self.act_reset_layout):
             m.addSeparator() if a is None else m.addAction(a)
@@ -168,6 +183,10 @@ class MainWindow(QMainWindow):
         self.canvas.measured.connect(lambda dx, dy, d: self.measure_label.setText(f"ΔX {dx:.3f}  ΔY {dy:.3f}  D {d:.3f} mm"))
         self.canvas.itemPicked.connect(self._on_picked)
         self.canvas.selectionCleared.connect(self.inspector.clear)
+        self.canvas.contextRequested.connect(self._canvas_context)
+        self.canvas.editRequested.connect(
+            lambda k: self.edit_components([("board" if k[0] == "placement" else "panel", k[1][0])])
+        )
         self.canvas.zoomChanged.connect(lambda z: self.zoom_label.setText(f"{z:.1f} px/mm"))
         self.layers_panel.layerToggled.connect(self._toggle_layer)
         self.circuits_panel.numberingChanged.connect(
@@ -175,10 +194,16 @@ class MainWindow(QMainWindow):
         )
         self.circuits_panel.referenceChanged.connect(lambda kind: c.apply("Change circuit reference", circuit_reference=kind))
         self.circuits_panel.circuitActivated.connect(self._show_circuit)
-        self.components_panel.componentSelected.connect(self._component_selected)
+        self.components_panel.componentSelected.connect(lambda level, d: self._component_selected(d, level))
         self.components_panel.partNumberAttributeChanged.connect(
             lambda key: c.apply("Map part number", part_number_attribute=key)
         )
+        self.components_panel.addRequested.connect(lambda: self.add_component())
+        self.components_panel.editRequested.connect(self.edit_components)
+        self.components_panel.removeRequested.connect(self.remove_components)
+        self.components_panel.restoreRequested.connect(self.restore_components)
+        self.components_panel.revertRequested.connect(self.revert_components)
+        self.components_panel.suggestRequested.connect(self.suggest_removals)
         self.fiducials_panel.acceptRequested.connect(self.accept_fiducial)
         self.fiducials_panel.removeRequested.connect(self.remove_fiducial)
         self.fiducials_panel.fiducialSelected.connect(self._fiducial_selected)
@@ -186,6 +211,7 @@ class MainWindow(QMainWindow):
         self.issues_panel.acknowledgeRequested.connect(self.acknowledge)
         self.issues_panel.unacknowledgeRequested.connect(self.unacknowledge)
         self.issues_panel.panelLevelRequested.connect(self.confirm_panel_level)
+        self.issues_panel.removePartsRequested.connect(self.remove_from_issues)
         self.summary.confirmRequested.connect(self.confirm_panel)
         self.summary.editRequested.connect(self.edit_roles)
         self.summary.singleBoardRequested.connect(self.single_board_setup)
@@ -214,19 +240,27 @@ class MainWindow(QMainWindow):
         self.act_roles.setEnabled(has)
         self.act_bom.setEnabled(has)
         self.act_confirm.setEnabled(has and a.can_confirm()[0] and not a.confirmed)
+        self.act_add_component.setEnabled(has)
+        self.suggest_menu.setEnabled(has)
+        if has:
+            found = edits.suggest_removals(a)
+            for kind, act in self.suggest_actions.items():
+                act.setText(f"{edits.SUGGESTIONS[kind]} ({len(found[kind])})…")
+                act.setEnabled(bool(found[kind]))
 
     def _on_analysis(self, a: PanelAnalysis | None, structural: bool) -> None:
         ro = self.controller.read_only
-        selected = self.components_panel.selected_designator()
+        keys = self.components_panel.selected_keys()
         self.canvas.set_analysis(a, keep_view=not structural)
         self.summary.set_analysis(a, ro)
         self.circuits_panel.set_analysis(a, ro)
         self.components_panel.set_analysis(a, ro)
         self.fiducials_panel.set_analysis(a, ro)
         self.issues_panel.set_analysis(a, ro)
-        if a is not None and selected:
-            self.canvas.select_designator(selected)
-            self.inspector.show_placement(a, selected)
+        if a is not None and keys and edits.find_part(a, *keys[0]) is not None:
+            level, designator = keys[0]
+            self.canvas.select_designator(designator, level=level)
+            self._inspect(level, designator)
         else:
             self.inspector.clear()
         self._update_actions()
@@ -247,9 +281,10 @@ class MainWindow(QMainWindow):
         if a is None:
             return
         if kind == "placement":
-            self.components_panel.select_designator(key[0])
+            self.components_panel.select_designator(key[0], "board")
             self.inspector.show_placement(a, key[0], key[1])
         elif kind == "panel_part":
+            self.components_panel.select_designator(key[0], "panel")
             self.inspector.show_panel_part(a, key[0])
         elif kind == "fiducial":
             self.fiducials_panel.select(key[0])
@@ -272,12 +307,18 @@ class MainWindow(QMainWindow):
         if not on:
             self.measure_label.setText("")
 
-    def _component_selected(self, designator: str) -> None:
+    def _component_selected(self, designator: str, level: str = "board") -> None:
         a = self.analysis
         if a is None:
             return
-        self.canvas.select_designator(designator, 1, center=True)
-        self.inspector.show_placement(a, designator, 1)
+        self.canvas.select_designator(designator, 1, center=True, level=level)
+        self._inspect(level, designator, 1)
+
+    def _inspect(self, level: str, designator: str, circuit: int | None = None) -> None:
+        if level == "panel":
+            self.inspector.show_panel_part(self.analysis, designator)
+        else:
+            self.inspector.show_placement(self.analysis, designator, circuit)
 
     def _fiducial_selected(self, name: str) -> None:
         if self.analysis is not None:
@@ -302,9 +343,11 @@ class MainWindow(QMainWindow):
             self._show_circuit(issue.circuit)
         if issue.designator:
             self.canvas.select_designator(issue.designator, issue.circuit)
-            if any(p.designator == issue.designator for p in a.placements):
-                self.components_panel.select_designator(issue.designator)
-                self.inspector.show_placement(a, issue.designator, issue.circuit)
+            for level in ("board", "panel"):
+                if edits.find_part(a, level, issue.designator) is not None:
+                    self.components_panel.select_designator(issue.designator, level)
+                    self._inspect(level, issue.designator, issue.circuit)
+                    break
 
     # ------------------------------------------------------------------ edits
     def confirm_panel(self) -> None:
@@ -384,6 +427,162 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Panel export", str(exc))
                     return
             self.controller.apply("Single-board setup", single_board=dlg.result_setup)
+
+    # ------------------------------------------------------------------ component edits
+    def _set_component_edits(self, text: str, new: list) -> None:
+        a = self.analysis
+        if a is None or self.controller.read_only or new == a.component_edits:
+            return
+        self.controller.apply(text, component_edits=new, edit_frame=a.edit_frame)
+
+    @staticmethod
+    def _names(keys) -> str:
+        names = [d for _lv, d in keys]
+        return ", ".join(names) if len(names) <= 3 else f"{len(names)} components"
+
+    def add_component(self, level: str = "board", position: dict | None = None) -> None:
+        a = self.analysis
+        if a is None or self.controller.read_only:
+            return
+        dlg = ComponentDialog(self, a, level=level, position=position)
+        if not dlg.exec() or dlg.validate():
+            return
+        new = edits.added_edit(dlg.chosen_level(), dlg.chosen_designator(), dlg.values(), dlg.note_text())
+        self._set_component_edits(f"Add {new.designator}", edits.set_edits(a.component_edits, [new]))
+        self.tabs.setCurrentWidget(self.components_panel)
+        self.components_panel.select_designator(new.designator, new.level)
+        self._component_selected(new.designator, new.level)
+
+    def edit_components(self, keys: list) -> None:
+        a = self.analysis
+        keys = [tuple(k) for k in keys if edits.find_part(a, *k) is not None] if a is not None else []
+        if not keys or self.controller.read_only:
+            return
+        dlg = ComponentDialog(self, a, keys)
+        if not dlg.exec() or dlg.validate():
+            return
+        values, note = dlg.values(), dlg.note_text()
+        new, drop = [], []
+        for key in keys:
+            part = edits.find_part(a, *key)
+            if part.state == "added" and dlg.mode == "one":
+                renamed = edits.added_edit(key[0], dlg.chosen_designator(), values, note)
+                new.append(renamed)
+                if renamed.key != key:
+                    drop.append(key)
+                continue
+            merged = {**edits.shown_values(a, part), **values}
+            e = edits.edit_from_values(a, key[0], key[1], merged, note if dlg.mode == "one" else None)
+            if e is None:
+                drop.append(key)
+            else:
+                new.append(e)
+        self._set_component_edits(f"Edit {self._names(keys)}", edits.set_edits(a.component_edits, new, drop))
+
+    def remove_components(self, keys: list, reason: str = "through-hole", why: dict | None = None, title: str = "") -> None:
+        """Review and remove (not place) components; ``why`` explains each one in the dialog."""
+        a = self.analysis
+        if a is None or self.controller.read_only:
+            return
+        rows = []
+        for key in keys:
+            part = edits.find_part(a, *key)
+            if part is None or part.state == "removed":
+                continue
+            what = " · ".join(x for x in (part.part_name, part.package) if x)
+            rows.append((tuple(key), what, (why or {}).get(tuple(key), "added by hand" if part.state == "added" else "")))
+        if not rows:
+            return
+        dlg = RemoveDialog(self, rows, reason, title or "Remove components")
+        if not dlg.exec() or not dlg.chosen():
+            return
+        chosen = dlg.chosen()
+        new = edits.remove_parts(a.component_edits, chosen, dlg.chosen_reason(), dlg.note_text())
+        label = edits.REASON_LABELS.get(dlg.chosen_reason(), "")
+        self._set_component_edits(f"Remove {self._names(chosen)} ({label})", new)
+
+    def restore_components(self, keys: list) -> None:
+        a = self.analysis
+        if a is not None:
+            keys = [tuple(k) for k in keys]
+            self._set_component_edits(f"Restore {self._names(keys)}", edits.restore_parts(a.component_edits, keys))
+
+    def revert_components(self, keys: list) -> None:
+        a = self.analysis
+        if a is not None:
+            keys = [tuple(k) for k in keys]
+            self._set_component_edits(f"Revert {self._names(keys)} to the export", edits.revert_parts(a.component_edits, keys))
+
+    def suggest_removals(self, kind: str) -> None:
+        a = self.analysis
+        if a is None:
+            return
+        found = edits.suggest_removals(a).get(kind, [])
+        if not found:
+            QMessageBox.information(self, "Remove components", f"No {edits.SUGGESTIONS[kind].lower()} found.")
+            return
+        self.remove_components(
+            [s.key for s in found],
+            edits.SUGGESTED_REASON[kind],
+            {s.key: s.why for s in found},
+            f"Remove {edits.SUGGESTIONS[kind].lower()}",
+        )
+
+    def remove_from_issues(self, issues: list[Issue]) -> None:
+        a = self.analysis
+        if a is None:
+            return
+        keys, why = [], {}
+        reason = "other"
+        for issue in issues:
+            for level in ("board", "panel"):
+                part = edits.find_part(a, level, issue.designator or "")
+                if part is not None and part.state != "removed":
+                    key = (level, part.designator)
+                    if key not in keys:
+                        keys.append(key)
+                        why[key] = issue.code
+                    break
+            if issue.code == "no_paste":
+                reason = "through-hole"
+            elif issue.code in ("bom_not_in_bom", "copy_count") and reason == "other":
+                reason = "not-populated"
+        self.remove_components(keys, reason, why)
+
+    def canvas_menu(self, key, x: float, y: float) -> QMenu:
+        """The canvas's right-click menu: actions on the component under the cursor, and
+        adding a component at the clicked point (board-level inside a circuit)."""
+        a = self.analysis
+        menu = QMenu(self)
+        if a is None:
+            return menu
+        ro = self.controller.read_only
+        if key is not None:
+            kind, k = key
+            level = "board" if kind == "placement" else "panel"
+            part = edits.find_part(a, level, k[0])
+            if part is not None:
+                title = menu.addAction(f"{part.designator} — {part.part_name or part.package or level}")
+                title.setEnabled(False)
+                cmp_key = (level, part.designator)
+                menu.addAction(f"Edit {part.designator}…", lambda: self.edit_components([cmp_key])).setEnabled(not ro)
+                if part.state == "removed":
+                    menu.addAction(f"Restore {part.designator}", lambda: self.restore_components([cmp_key])).setEnabled(not ro)
+                else:
+                    menu.addAction(f"Remove {part.designator}…", lambda: self.remove_components([cmp_key])).setEnabled(not ro)
+                if part.state == "edited":
+                    menu.addAction(f"Revert {part.designator} to the export", lambda: self.revert_components([cmp_key])).setEnabled(not ro)
+                menu.addSeparator()
+        rel = a.circuit_relative(x, y)
+        position = {"panel": (x, y), "board": (rel[1], rel[2]) if rel else None}
+        where = f"circuit {rel[0]}, X {rel[1]:.3f} Y {rel[2]:.3f}" if rel else f"panel X {x:.3f} Y {y:.3f}"
+        level = "board" if rel else "panel"
+        add = menu.addAction(f"Add component here ({where})…", lambda: self.add_component(level, position))
+        add.setEnabled(not ro)
+        return menu
+
+    def _canvas_context(self, key, x: float, y: float, global_pos) -> None:
+        self.canvas_menu(key, x, y).exec(global_pos)
 
     # ------------------------------------------------------------------ files
     def _discard_ok(self) -> bool:

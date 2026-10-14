@@ -7,7 +7,8 @@ which Phase 2 (ISS output) reads. Phase 1 writes no machine program and never ch
 the export.
 
 ```
-import ODB++ → automatic detection → review issues → confirm panel → pick fiducials → save project
+import ODB++ → automatic detection → review issues → confirm panel → pick fiducials
+            → add, edit or remove components (optional) → save project
 ```
 
 ## Running it
@@ -50,12 +51,24 @@ executables with Python removed from `PATH`, and uploads the folder as the
   status bar shows the cursor's panel and circuit-relative coordinates.
 * **Circuits** tab — offsets, rotation, mirror, source and residual per circuit; choose
   the corner of circuit 1, the numbering order and the reference point.
-* **Components** tab — circuit 1's placements, sortable, filterable and searchable; pick
-  the attribute that holds the part number. Selecting a row selects the part on the
-  canvas and vice versa.
+* **Components** tab — circuit 1's placements and the panel-level parts, sortable,
+  filterable and searchable; pick the attribute that holds the part number. Selecting a
+  row selects the part on the canvas and vice versa. Components can be edited here (see
+  [Component edits](#component-edits)): **Add…** (`Insert`), **Edit…** (`F2` or
+  double-click; several rows at once change part name, part number or package),
+  **Remove…** (`Delete`), **Restore**, **Revert** and **Find ▾**, which lists
+  through-hole, not-populated, fiducial/mechanical and not-in-BOM parts for review.
+  Edited values are amber (the export's value is in the tooltip), added parts green,
+  removed parts grey and struck through; **Show** filters on them.
 * **Issues** — every inconsistency, with severity and location; click to zoom. Errors
   block **Confirm panel**; warnings must be acknowledged (saved with the project);
-  copy-count errors in flattened panels can be confirmed as panel-level parts.
+  copy-count errors in flattened panels can be confirmed as panel-level parts, and
+  **Remove part…** removes the components the selected issues name (e.g. a `no_paste`
+  through-hole part).
+* **Right-click on the canvas** — edit, remove, restore or revert the component under
+  the cursor, or add one at that point (board-level inside a circuit, with its
+  circuit-relative position filled in; panel-level outside). Double-click a component to
+  edit it. Removed components show as a grey ×, edited ones in amber, added ones in green.
 * **Fiducials** — after confirming, accept up to three panel fiducials (click them on the
   canvas or use the table); a fourth is refused. Circuit-level fiducials are shown in
   grey and cannot be picked.
@@ -64,8 +77,43 @@ executables with Python removed from `PATH`, and uploads the folder as the
   flagged by its SHA-256, a missing one opens the saved project read-only.
 
 Every edit (roles, numbering, reference, part-number mapping, fiducials, acknowledgements,
-panel-level confirmations, single-board setup, confirmation) is undoable. Window layout
-and layer visibility are remembered.
+panel-level confirmations, single-board setup, component edits, confirmation) is
+undoable. Window layout and layer visibility are remembered.
+
+## Component edits
+
+Not every component in the export is machine-placed, and the export is not always
+right. Phase 1 never changes the export; it records **component edits** with the
+project and applies them on top of the export every time it is analysed (reopening
+reproduces them, and `panelimport verify` lists them).
+
+* **Remove** — the component is not placed: it leaves `placements` (or `panel_parts`)
+  and its per-part checks, with a reason: *through-hole*, *not populated (DNP)*,
+  *mechanical / fiducial* or *other*, plus an optional note. It still exists: a removed
+  `FID1` is still a fiducial candidate, and it stays on the canvas as a grey ×.
+  **Find ▾** proposes candidates, always for review in a checklist before anything is
+  removed: through-hole (`.comp_mount_type = thmt/pressfit`, or no paste on its pads),
+  not populated (`.no_pop`, or an attribute such as `DNP = True` or a value such as
+  `Not Fitted`), fiducial or pinless mechanical parts, and parts missing from a loaded
+  BOM. On a flattened panel a removed designator also leaves the copy count and the
+  circuit fit.
+* **Edit** — override part name, part number, package, side, position or rotation. A
+  part-number edit wins over the part-number attribute. A position or rotation edit
+  corrects where the part is placed; its pads and body stay where the PCB has them, so
+  the paste check now compares the corrected centroid with the part's own pads (and
+  warns with `centroid_off_pads` when it is off them).
+* **Add** — a component the export does not have, board-level (placed in every circuit)
+  or panel-level (placed once). When its package name matches a package in the export,
+  it gets that package's pins and body, is drawn and is paste-checked
+  (`added_no_paste` warns when no paste is under it).
+
+Board-level X/Y are circuit-relative and panel-level X/Y are panel coordinates, exactly
+as the components table shows them and as `placements`/`panel_parts` store them.
+Changing the circuit reference, the numbering (which on a flattened panel can move
+circuit 1 to a rotated copy) or the panel origin converts the edits, so an edited or
+added part never moves on the panel. Component edits do not change the panel structure,
+so they keep the panel's confirmation; their warnings still have to be cleared before
+saving.
 
 ## How the panel is identified
 
@@ -120,6 +168,12 @@ From the *ODB++ Format Description v7.0* and *Design Format Specification 8.1 Up
 | `duplicate_designator` | designator twice in one circuit | exact | Error |
 | `unknown_units`, `missing_file`, `unknown_record`, `parse_error` | export problems | — | Error |
 | `bom_not_in_odb`, `bom_not_in_bom` | optional BOM CSV vs export | exact | Warning |
+| `bom_removed` | a BOM part removed as not populated | exact | Warning |
+| `edit_conflict`, `edit_invalid` | an added designator the export now has; an incomplete edit | — | Error |
+| `edit_orphan` | an edit naming a component the export does not have | — | Warning |
+| `edit_frame` | edit positions entered for a different panel structure, used unchanged | — | Warning |
+| `outside_outline` | an added or moved part outside the board (or panel) outline | — | Warning |
+| `added_no_paste` | no paste under a part added by hand | — | Warning |
 
 Also reported: ambiguous steps (`ambiguous_steps`, Error until chosen), a single-board
 export (`single_board`, Error until confirmed), units read by default
@@ -139,9 +193,26 @@ The project file keeps a copy of the settings it was made with.
 `format`, `version`, `source` (path relative to the project, SHA-256, steps), `mode`,
 `panel` (outline, origin), `grid`, `numbering`, `circuit_reference`, `circuit_outline`,
 `circuits`, `part_number_attribute`, `placements` (with every attribute), `panel_parts`,
-`fiducials`, `acknowledged_warnings`, `layer_roles`, `panel_level_designators`,
-`single_board`, `settings`. Loading is strict: unknown keys or a newer version are
-rejected. Values are rounded to 1 nm, so save → reopen gives an identical model.
+`component_edits`, `fiducials`, `acknowledged_warnings`, `layer_roles`,
+`panel_level_designators`, `single_board`, `settings`. Loading is strict: unknown keys or
+a newer version are rejected. Values are rounded to 1 nm, so save → reopen gives an
+identical model.
+
+`placements` and `panel_parts` already have the component edits applied: Phase 2 places
+exactly what they list. `component_edits` records what the user changed, in the same
+frames, leaving out fields at their default:
+
+```json
+"component_edits": [
+  {"designator": "C7", "level": "board", "part_number": "D-1234", "x": 25.15, "y": 10.0},
+  {"designator": "J1", "level": "board", "removed": true, "reason": "through-hole", "note": "hand-soldered"},
+  {"designator": "U9", "level": "board", "added": true, "part_name": "", "part_number": "IC-9",
+   "package": "SOIC8", "layer": "top", "x": 40.0, "y": 12.0, "rotation": 270.0}
+]
+```
+
+Version 2 added `component_edits` and `panel_parts[].part_number` (and fills the panel
+parts' `package`); version 1 projects still open.
 
 ## Tests
 
@@ -168,9 +239,10 @@ panelimport/
   io/bom.py    optional BOM CSV
   model/       issues, panel dataclasses, project_file, serialize
   analysis/    roles, step_repeat, grouping (flattened), transforms (fit, grid,
-               numbering), checks, fiducials, layers, pipeline, result, snapshot
-  gui/         main_window, canvas, geometry, import/settings/single-board dialogs,
-               controller (undo), panels/
+               numbering), checks, fiducials, layers, edits (component edits,
+               suggestions), pipeline, result, snapshot
+  gui/         main_window, canvas, geometry, import/settings/single-board/component
+               dialogs, controller (undo), panels/
 packaging/     PyInstaller spec and entry points
 ```
 
@@ -188,6 +260,8 @@ packaging/     PyInstaller spec and entry points
 - [ ] Bottom-side placements: read and flagged by layer; whether the machine places them
       is for Phase 2.
 
-Not in Phase 1: ISS output, the DETEX_New.mdb lookup, rotation correction, editing PCB
-data, and the Pick-and-Place CSV + Gerber input (to be built after the ODB++ path passes
-acceptance).
+Not in Phase 1: ISS output, the DETEX_New.mdb lookup, rotation correction (beyond
+editing a component's rotation by hand), editing the PCB data itself (component edits
+are stored in the project, not in the export), per-circuit edits (an edit applies to
+every circuit), and the Pick-and-Place CSV + Gerber input (to be built after the ODB++
+path passes acceptance).

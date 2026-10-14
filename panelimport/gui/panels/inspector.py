@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QBrush
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
+from panelimport.analysis.edits import shown_values, status_text
 from panelimport.analysis.result import PanelAnalysis
+from panelimport.gui import theme
+
+EXPORT_LABEL = "    export"  # the row under an edited value, showing the export's
+
+
+def _field(part, a: PanelAnalysis, label: str, field: str, fmt: str = "{}") -> list[tuple]:
+    """A value's row, followed by the export's value when an edit changed it."""
+    value = shown_values(a, part)[field]
+    rows: list[tuple] = [(label, fmt.format(value) if value != "" else "-")]
+    if field in part.export:
+        old = shown_values(a, part, export=True)[field]
+        rows.append((EXPORT_LABEL, fmt.format(old) if old != "" else "(empty)"))
+    return rows
+
+
+def _status_rows(part) -> list[tuple]:
+    rows: list[tuple] = [("Status", status_text(part) or "as exported")]
+    if part.edit is not None and part.edit.note:
+        rows.append(("Note", part.edit.note))
+    return rows
 
 
 class Inspector(QWidget):
@@ -21,39 +43,47 @@ class Inspector(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.setWordWrap(True)
         self.setMinimumWidth(300)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self.title)
         layout.addWidget(self.table)
 
-    def _rows(self, title: str, rows: list[tuple[str, str]]) -> None:
+    def _rows(self, title: str, rows: list[tuple]) -> None:
         self.title.setText(title)
         self.table.setRowCount(len(rows))
         for r, (k, v) in enumerate(rows):
-            self.table.setItem(r, 0, QTableWidgetItem(k))
+            key = QTableWidgetItem(k)
             item = QTableWidgetItem(v)
             item.setToolTip(v)
+            if k == EXPORT_LABEL:  # what the export had, under the edited value
+                for cell in (key, item):
+                    cell.setForeground(QBrush(theme.REMOVED))
+            elif k == "Status" and v != "as exported":
+                item.setForeground(QBrush(theme.EDITED))
+            self.table.setItem(r, 0, key)
             self.table.setItem(r, 1, item)
+        self.table.resizeRowsToContents()
 
     def clear(self) -> None:
         self._rows("Nothing selected", [])
 
     def show_placement(self, a: PanelAnalysis, designator: str, circuit: int | None = None) -> None:
-        p = next((p for p in a.placements if p.designator == designator), None)
+        p = next((p for p in [*a.placements, *a.removed_placements] if p.designator == designator), None)
         if p is None:
             self.clear()
             return
-        rx, ry = a.reference_board
         rows = [
             ("Designator", p.designator),
-            ("Part name", p.part_name),
-            ("Part number", p.part_number or "-"),
-            ("Package", p.package or "-"),
-            ("Layer", p.layer),
-            ("Circuit X (mm)", f"{p.x - rx:.4f}"),
-            ("Circuit Y (mm)", f"{p.y - ry:.4f}"),
-            ("Rotation (CCW)", f"{p.rotation:.3f}°"),
+            *_status_rows(p),
+            *_field(p, a, "Part name", "part_name"),
+            *_field(p, a, "Part number", "part_number"),
+            *_field(p, a, "Package", "package"),
+            *_field(p, a, "Layer", "layer"),
+            *_field(p, a, "Circuit X (mm)", "x", "{:.4f}"),
+            *_field(p, a, "Circuit Y (mm)", "y", "{:.4f}"),
+            *_field(p, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
             ("Rotation raw (ODB++, CW)", f"{p.rotation_raw:.3f}°"),
             ("Paste check", p.paste.describe() if p.paste else "-"),
         ]
@@ -70,23 +100,26 @@ class Inspector(QWidget):
         self._rows(f"{p.designator} — {p.part_name}", rows)
 
     def show_panel_part(self, a: PanelAnalysis, designator: str) -> None:
-        pp = next((p for p in a.panel_parts if p.designator == designator), None)
+        pp = next((p for p in [*a.panel_parts, *a.removed_panel_parts] if p.designator == designator), None)
         if pp is None:
             self.clear()
             return
-        self._rows(
-            f"{pp.designator} — panel-level part",
-            [
-                ("Designator", pp.designator),
-                ("Part name", pp.part_name),
-                ("Layer", pp.layer),
-                ("Panel X (mm)", f"{pp.x:.4f}"),
-                ("Panel Y (mm)", f"{pp.y:.4f}"),
-                ("Rotation (CCW)", f"{pp.rotation:.3f}°"),
-                ("Rotation raw (CW)", f"{pp.rotation_raw:.3f}°"),
-                ("Step", pp.step),
-            ],
-        )
+        rows = [
+            ("Designator", pp.designator),
+            *_status_rows(pp),
+            *_field(pp, a, "Part name", "part_name"),
+            *_field(pp, a, "Part number", "part_number"),
+            *_field(pp, a, "Package", "package"),
+            *_field(pp, a, "Layer", "layer"),
+            *_field(pp, a, "Panel X (mm)", "x", "{:.4f}"),
+            *_field(pp, a, "Panel Y (mm)", "y", "{:.4f}"),
+            *_field(pp, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
+            ("Rotation raw (CW)", f"{pp.rotation_raw:.3f}°"),
+            ("Step", pp.step or "-"),
+        ]
+        for k, v in sorted(pp.attributes.items()):
+            rows.append((f"  {k}", v))
+        self._rows(f"{pp.designator} — panel-level part", rows)
 
     def show_fiducial(self, a: PanelAnalysis, name: str) -> None:
         f = next((f for f in a.fiducial_candidates if f.name == name), None)

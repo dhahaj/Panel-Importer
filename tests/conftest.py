@@ -41,3 +41,60 @@ def issues_of(analysis, code: str):
 @pytest.fixture(autouse=True)
 def _isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("PANELIMPORT_SETTINGS", str(tmp_path / "settings.json"))
+
+
+# ---------------------------------------------------------------- GUI (PySide6 imported lazily)
+@pytest.fixture(scope="module")
+def app():
+    pytest.importorskip("PySide6")
+    from panelimport.app import create_app
+
+    return create_app([])
+
+
+@pytest.fixture
+def boxes(monkeypatch):
+    """Record message boxes instead of blocking on them."""
+    from PySide6.QtWidgets import QMessageBox
+
+    seen = []
+
+    def make(kind, answer=QMessageBox.Yes):
+        def box(parent, title, text, *args, **kwargs):
+            seen.append((kind, title, text))
+            return answer
+
+        return box
+
+    monkeypatch.setattr(QMessageBox, "warning", make("warning", QMessageBox.Ok))
+    monkeypatch.setattr(QMessageBox, "information", make("information", QMessageBox.Ok))
+    monkeypatch.setattr(QMessageBox, "question", make("question"))
+    return seen
+
+
+@pytest.fixture
+def window(app, tmp_path, boxes):
+    from PySide6.QtCore import QSettings
+
+    from panelimport.app import dispose
+    from panelimport.gui.main_window import MainWindow
+
+    w = MainWindow(Settings(), QSettings(str(tmp_path / "gui.ini"), QSettings.IniFormat))
+    w.resize(1400, 900)
+    w.show()
+    app.processEvents()
+    yield w
+    w.controller.undo_stack.setClean()
+    dispose(w)
+
+
+def open_panel(window, tmp_path: Path, app, job=None) -> Path:
+    """Write a synthetic panel (default: 20 parts) and open it in the window."""
+    from tests.synthetic.odbgen import sr_panel
+
+    job = job or sr_panel(n_parts=20)
+    src = job.write_tgz(tmp_path / "Panel_ODB.tgz")
+    window.open_job(OdbJob(src), Decisions())
+    app.processEvents()
+    return src
+

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from panelimport.io.odb.archive import source_sha256
 from panelimport.model.issues import Issue, error, warning
-from panelimport.model.panel import PROJECT_FORMAT, PROJECT_VERSION, PanelProject
+from panelimport.model.panel import PROJECT_FORMAT, PROJECT_VERSION, READABLE_VERSIONS, ComponentEdit, PanelProject
 from panelimport.model.serialize import SerializationError, from_jsonable, to_jsonable
 
 PROJECT_SUFFIX = ".panel.json"
@@ -29,7 +29,18 @@ def project_to_dict(project: PanelProject) -> dict:
     data["acknowledged_warnings"] = [
         {k: v for k, v in ack.items() if v is not None} for ack in data["acknowledged_warnings"]
     ]
+    # Component edits likewise, leaving out fields at their default (loading restores them):
+    # {"designator": "J1", "level": "board", "removed": true, "reason": "through-hole"}.
+    defaults = {f.name: f.default for f in fields(ComponentEdit)}
+    data["component_edits"] = [
+        {k: v for k, v in edit.items() if k in ("designator", "level") or _differs(v, defaults[k])}
+        for edit in data["component_edits"]
+    ]
     return data
+
+
+def _differs(value, default) -> bool:
+    return type(value) is not type(default) or value != default  # 0.0 is a value, not "unset"
 
 
 def project_from_dict(data: dict) -> PanelProject:
@@ -38,8 +49,10 @@ def project_from_dict(data: dict) -> PanelProject:
     if data.get("format") != PROJECT_FORMAT:
         raise ProjectFileError(f"not a panel project file (format {data.get('format')!r})")
     version = data.get("version")
-    if version != PROJECT_VERSION:
-        raise ProjectFileError(f"unsupported project version {version!r} (this program reads version {PROJECT_VERSION})")
+    if isinstance(version, bool) or version not in READABLE_VERSIONS:
+        raise ProjectFileError(
+            f"unsupported project version {version!r} (this program reads versions up to {PROJECT_VERSION})"
+        )
     try:
         return from_jsonable(PanelProject, data)
     except SerializationError as exc:
@@ -102,6 +115,12 @@ def check_source(project: PanelProject, project_path: str | os.PathLike) -> tupl
     return src, None
 
 
+#: Fields that describe the file rather than the panel.
+FILE_FIELDS = frozenset({"format", "version", "generator"})
+
+
 def diff_projects(a: PanelProject, b: PanelProject) -> list[str]:
     """Top-level fields that differ between two projects (for the reopen self-check)."""
-    return [f.name for f in fields(PanelProject) if getattr(a, f.name) != getattr(b, f.name)]
+    return [
+        f.name for f in fields(PanelProject) if f.name not in FILE_FIELDS and getattr(a, f.name) != getattr(b, f.name)
+    ]

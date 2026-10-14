@@ -132,7 +132,7 @@ class CompDef:
     side: str = "top"
     part: str = "PART"
     props: dict[str, str] = field(default_factory=dict)
-    attrs: dict[str, str] = field(default_factory=dict)
+    attrs: dict[str, str | bool] = field(default_factory=dict)
 
 
 @dataclass
@@ -161,6 +161,8 @@ LAYERS: list[tuple[str, str, str]] = [
     ("comp_+_bot", "COMPONENT", "BOARD"),
     ("board_outline", "ROUT", "BOARD"),
 ]
+# OPTION-type component attributes are written as option indices.
+COMPONENT_OPTIONS = {".comp_mount_type": ["other", "smt", "thmt", "pressfit"]}
 SIDE_LAYERS = {
     "top": ("top_paste", "top_copper", "top_mask"),
     "bottom": ("bottom_paste", "bottom_copper", "bottom_mask"),
@@ -373,7 +375,12 @@ class Job:
                 parts = []
                 for k, v in comp.attrs.items():
                     idx = attr_names.setdefault(k, len(attr_names))
-                    parts.append(f"{idx}={attr_texts.setdefault(v, len(attr_texts))}")
+                    if v is True:  # boolean attribute: present, no value
+                        parts.append(f"{idx}")
+                    elif k in COMPONENT_OPTIONS:
+                        parts.append(f"{idx}={COMPONENT_OPTIONS[k].index(v)}")
+                    else:
+                        parts.append(f"{idx}={attr_texts.setdefault(v, len(attr_texts))}")
                 attrs = ";" + ",".join(parts)
             mirror = "M" if side == "bottom" else "N"
             recs.append(f"# CMP {i}")
