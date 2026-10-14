@@ -26,6 +26,7 @@ from panelimport import __version__
 from panelimport.analysis import edits
 from panelimport.analysis.fiducials import MAX_PANEL_FIDUCIALS
 from panelimport.analysis.result import PanelAnalysis
+from panelimport.components_csv import COMPONENTS_SUFFIX, write_components_csv
 from panelimport.gui.canvas import PanelCanvas
 from panelimport.gui.component_dialog import ComponentDialog, RemoveDialog
 from panelimport.gui.controller import Controller
@@ -129,6 +130,9 @@ class MainWindow(QMainWindow):
         self.act_save = self._action("&Save project", lambda: self.save_project(False), QKeySequence.Save)
         self.act_save_as = self._action("Save project &as…", lambda: self.save_project(True), QKeySequence.SaveAs)
         self.act_bom = self._action("Load &BOM CSV…", self.load_bom, tip="Cross-check designators against a BOM")
+        self.act_export_components = self._action(
+            "&Export components CSV…", self.export_components, tip="Write every component in the Components tab to a CSV file"
+        )
         self.act_quit = self._action("&Quit", self.close, QKeySequence.Quit)
         self.act_undo = self.controller.undo_stack.createUndoAction(self, "&Undo")
         self.act_undo.setShortcut(QKeySequence.Undo)
@@ -153,7 +157,7 @@ class MainWindow(QMainWindow):
         self.act_about = self._action("&About", self.about)
 
         m = self.menuBar().addMenu("&File")
-        for a in (self.act_import, self.act_open, None, self.act_save, self.act_save_as, None, self.act_bom, None, self.act_quit):
+        for a in (self.act_import, self.act_open, None, self.act_save, self.act_save_as, None, self.act_bom, self.act_export_components, None, self.act_quit):
             m.addSeparator() if a is None else m.addAction(a)
         m = self.menuBar().addMenu("&Edit")
         for a in (self.act_undo, self.act_redo, None, self.act_roles, self.act_confirm, None, self.act_add_component):
@@ -239,6 +243,7 @@ class MainWindow(QMainWindow):
         self.act_save_as.setEnabled(has and a.confirmed)
         self.act_roles.setEnabled(has)
         self.act_bom.setEnabled(has)
+        self.act_export_components.setEnabled(a is not None)  # also from a read-only project
         self.act_confirm.setEnabled(has and a.can_confirm()[0] and not a.confirmed)
         self.act_add_component.setEnabled(has)
         self.suggest_menu.setEnabled(has)
@@ -682,6 +687,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "BOM", str(exc))
             return
         self.controller.apply("Load BOM", bom_path=path)
+
+    def export_components(self) -> None:
+        a = self.analysis
+        if a is None:
+            return
+        project = self.controller.session.project_path or default_project_path(a.job.path)
+        default = project.with_name(project.name.removesuffix(PROJECT_SUFFIX) + COMPONENTS_SUFFIX)
+        name, _ = QFileDialog.getSaveFileName(self, "Export components", str(default), "CSV files (*.csv);;All files (*)")
+        if not name:
+            return
+        if not Path(name).suffix:
+            name += ".csv"
+        try:
+            count = write_components_csv(a, name)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export components", str(exc))
+            return
+        self.statusBar().showMessage(f"Exported {count} components to {name}", 5000)
 
     def edit_settings(self) -> None:
         dlg = SettingsDialog(self.controller.session.settings, self)

@@ -19,12 +19,14 @@ Requires Python 3.12.
 pip install -e ".[dev]"          # PySide6, shapely, numpy, unlzw3, pytest, PyInstaller
 panelimport-gui                  # the GUI (or: python -m panelimport)
 panelimport analyze Panel.tgz    # the same summary and issues the GUI shows
+panelimport analyze Panel.tgz --components-csv parts.csv   # also write the components
 panelimport verify Panel.panel.json   # saved project vs. its source (SHA-256 + re-analysis)
 ```
 
 `panelimport analyze` options: `--panel-step`, `--board-step`, `--first` (corner of
 circuit 1), `--order`, `--reference`, `--copy-suffix REGEX`, `--part-number-attribute`,
-`--panel-level FID1,FID2`, `--bom bom.csv`, `--settings file.json`, `--json`, `-v`.
+`--panel-level FID1,FID2`, `--bom bom.csv`, `--components-csv FILE`, `--settings file.json`,
+`--json`, `-v`.
 Exit code 0 = no errors, 1 = errors found, 2 = could not open.
 
 ### Windows build (no Python needed on the target machine)
@@ -75,6 +77,9 @@ executables with Python removed from `PATH`, and uploads the folder as the
 * **File → Save project** — writes `<name>.panel.json`. Reopening re-analyses the source
   with the saved decisions and checks that the result is identical; a changed export is
   flagged by its SHA-256, a missing one opens the saved project read-only.
+* **File → Export components CSV…** — writes the Components tab's table to
+  `<name>.components.csv` (see [Components CSV](#components-csv)). It needs no confirmed
+  panel and also works from a read-only project.
 
 Every edit (roles, numbering, reference, part-number mapping, fiducials, acknowledgements,
 panel-level confirmations, single-board setup, component edits, confirmation) is
@@ -114,6 +119,23 @@ circuit 1 to a rotated copy) or the panel origin converts the edits, so an edite
 added part never moves on the panel. Component edits do not change the panel structure,
 so they keep the panel's confirmation; their warnings still have to be cleared before
 saving.
+
+## Components CSV
+
+**File → Export components CSV…** and `panelimport analyze --components-csv FILE` write
+one row per component, with the columns of the Components tab: `Designator`, `Level`,
+`Part name`, `Part number`, `Package`, `Side`, `X (mm)`, `Y (mm)`, `Rotation (°)`,
+`Paste check`, `Status`.
+
+* Every component is written whatever the tab's search and filters show: circuit 1's
+  placements (`board`) first, then the panel-level parts (`panel`), each in designator
+  order.
+* The values are the ones the tab shows, component edits applied: board-level X/Y are
+  circuit-relative, panel-level X/Y are panel coordinates, rotation is counter-clockwise.
+  Numbers have the project file's precision instead of the three decimals shown.
+* Removed components are listed too, with `removed: …` in `Status` (`added` and
+  `edited: …` mark the other changed ones); filter on it for the parts that are placed.
+* The file is comma-separated UTF-8 with a byte-order mark, which Excel opens directly.
 
 ## How the panel is identified
 
@@ -233,7 +255,7 @@ QT_QPA_PLATFORM=offscreen pytest -q
 
 ```
 panelimport/
-  app.py, cli.py, session.py, report.py, settings.py
+  app.py, cli.py, session.py, report.py, components_csv.py, settings.py
   io/odb/      archive (folder/tgz/zip, .Z), matrix, stephdr, features, symbols,
                components, eda, attributes, job (lazy, cached)
   io/bom.py    optional BOM CSV

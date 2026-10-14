@@ -1,4 +1,5 @@
-"""Command line: ``panelimport analyze <odb path>`` prints the summary and issues the GUI shows.
+"""Command line: ``panelimport analyze <odb path>`` prints the summary and issues the GUI shows
+(``--components-csv`` also writes its components table).
 
 ``panelimport verify <project>`` checks a saved project against its source export
 (SHA-256 and re-analysis).
@@ -13,6 +14,7 @@ import sys
 
 from panelimport import __version__
 from panelimport.analysis.edits import edits_summary
+from panelimport.components_csv import write_components_csv
 from panelimport.io.bom import BomError
 from panelimport.io.odb import OdbOpenError
 from panelimport.model.panel import Decisions
@@ -92,6 +94,10 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(json.dumps(_analysis_json(analysis), indent=2, ensure_ascii=False))
     else:
         print(format_report(analysis, verbose=args.verbose))
+    if args.components_csv:
+        count = write_components_csv(analysis, args.components_csv)
+        if not args.json:
+            print(f"Components: {count} written to {args.components_csv}")
     return 1 if analysis.errors else 0
 
 
@@ -133,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--part-number-attribute", help="attribute or property holding the part number")
     p.add_argument("--panel-level", help="comma-separated designators confirmed as panel-level")
     p.add_argument("--bom", help="optional BOM CSV to cross-check designators")
+    p.add_argument("--components-csv", metavar="FILE", help="also write the components to a CSV file")
     p.add_argument("--json", action="store_true", help="print JSON instead of text")
     p.add_argument("-v", "--verbose", action="store_true", help="also list the placements")
     p.set_defaults(func=cmd_analyze)
