@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panelimport"
-version = "0.2.0"
-description = "Imports an Altium panel exported as ODB++ and identifies circuits, placements and fiducials (Phase 1 of the CircuitCAM replacement)."
+version = "0.3.0"
+description = "Imports an Altium panel exported as ODB++, identifies circuits, placements and fiducials, and writes the Juki ISS program (Phases 1 and 2 of the CircuitCAM replacement)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

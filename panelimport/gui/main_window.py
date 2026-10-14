@@ -1,6 +1,7 @@
 """Main window: canvas in the centre, layers and tables on the left, inspector on the
 right, issues along the bottom.  Workflow: import → detection → review issues →
-confirm panel → pick fiducials → (add, edit or remove components) → save project.
+confirm panel → pick fiducials → (add, edit or remove components) → save project
+→ export ISS (Phase 2).
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from panelimport.gui.canvas import PanelCanvas
 from panelimport.gui.component_dialog import ComponentDialog, RemoveDialog
 from panelimport.gui.controller import Controller
 from panelimport.gui.import_dialog import ImportDialog
+from panelimport.gui.iss_dialogs import CompareDialog, ExportIssDialog
 from panelimport.gui.panels.circuits import CircuitsPanel
 from panelimport.gui.panels.components import ComponentsPanel
 from panelimport.gui.panels.fiducials import FiducialsPanel
@@ -42,9 +44,12 @@ from panelimport.gui.settings_dialog import SettingsDialog
 from panelimport.gui.single_board_dialog import SingleBoardDialog
 from panelimport.io.bom import BomError, read_bom
 from panelimport.io.odb import OdbJob, OdbOpenError
+from panelimport.iss.settings import IssSettings
+from panelimport.iss.writer import default_iss_path, project_stem
 from panelimport.model.issues import Issue
 from panelimport.model.panel import Acknowledgement, Decisions
 from panelimport.model.project_file import PROJECT_SUFFIX, ProjectFileError, default_project_path
+from panelimport.model.serialize import SerializationError
 from panelimport.session import SessionError
 from panelimport.settings import Settings
 
@@ -133,6 +138,12 @@ class MainWindow(QMainWindow):
         self.act_export_components = self._action(
             "&Export components CSV…", self.export_components, tip="Write every component in the Components tab to a CSV file"
         )
+        self.act_export_iss = self._action(
+            "Export &ISS…", self.export_iss, "Ctrl+E", tip="Write the Juki ISS program for the confirmed panel"
+        )
+        self.act_compare = self._action(
+            "&Compare programs…", self.compare_programs, tip="Compare two ISS or .x21 programs part by part"
+        )
         self.act_quit = self._action("&Quit", self.close, QKeySequence.Quit)
         self.act_undo = self.controller.undo_stack.createUndoAction(self, "&Undo")
         self.act_undo.setShortcut(QKeySequence.Undo)
@@ -157,7 +168,10 @@ class MainWindow(QMainWindow):
         self.act_about = self._action("&About", self.about)
 
         m = self.menuBar().addMenu("&File")
-        for a in (self.act_import, self.act_open, None, self.act_save, self.act_save_as, None, self.act_bom, self.act_export_components, None, self.act_quit):
+        for a in (
+            self.act_import, self.act_open, None, self.act_save, self.act_save_as, None, self.act_bom,
+            self.act_export_components, None, self.act_export_iss, self.act_compare, None, self.act_quit,
+        ):
             m.addSeparator() if a is None else m.addAction(a)
         m = self.menuBar().addMenu("&Edit")
         for a in (self.act_undo, self.act_redo, None, self.act_roles, self.act_confirm, None, self.act_add_component):
@@ -244,6 +258,8 @@ class MainWindow(QMainWindow):
         self.act_roles.setEnabled(has)
         self.act_bom.setEnabled(has)
         self.act_export_components.setEnabled(a is not None)  # also from a read-only project
+        # A read-only project is a saved, confirmed one.
+        self.act_export_iss.setEnabled(a is not None and (ro or a.confirmed))
         self.act_confirm.setEnabled(has and a.can_confirm()[0] and not a.confirmed)
         self.act_add_component.setEnabled(has)
         self.suggest_menu.setEnabled(has)
@@ -706,6 +722,40 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage(f"Exported {count} components to {name}", 5000)
 
+    def export_iss(self) -> None:
+        a = self.analysis
+        if a is None:
+            return
+        session = self.controller.session
+        if self.controller.read_only:
+            project, project_path = session.saved_project, session.project_path
+            if project is None or project_path is None:
+                return
+        else:
+            if not a.confirmed:
+                QMessageBox.information(self, "Export ISS", "Confirm the panel before exporting ISS.")
+                return
+            project_path = session.project_path or default_project_path(a.job.path)
+            project = a.to_project(project_path)
+        try:
+            iss_settings = IssSettings.load()
+        except (SerializationError, ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Export ISS", f"The ISS settings could not be read; using defaults.\n\n{exc}")
+            iss_settings = IssSettings()
+        dlg = ExportIssDialog(
+            project,
+            iss_settings,
+            default_iss_path(project_path),
+            pwb_id=project_stem(project_path),
+            qsettings=self.qsettings,
+            parent=self,
+        )
+        if dlg.exec() and dlg.written is not None:
+            self.statusBar().showMessage(f"Wrote {dlg.written}", 8000)
+
+    def compare_programs(self) -> None:
+        CompareDialog(self.qsettings, self).exec()
+
     def edit_settings(self) -> None:
         dlg = SettingsDialog(self.controller.session.settings, self)
         if dlg.exec():
@@ -731,7 +781,8 @@ class MainWindow(QMainWindow):
             self,
             "Panel Importer",
             f"<b>Panel Importer</b> {__version__}<br>Phase 1: identifies an Altium panel exported as ODB++ "
-            "and saves it as a .panel.json project. It writes no machine program.",
+            "and saves it as a .panel.json project.<br>Phase 2: writes the Juki ISS program from the confirmed "
+            "project and compares programs (ISS or JaNets .x21).",
         )
 
     def closeEvent(self, event) -> None:
