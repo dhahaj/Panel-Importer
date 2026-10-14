@@ -1,0 +1,2433 @@
+{
+  "format": "panel-project",
+  "version": 2,
+  "generator": "panelimport 0.2.0",
+  "source": {
+    "kind": "odb++",
+    "path": "C:\\Users\\Public\\Documents\\Altium\\New_ER_TMC_Two_Connectors - Copy\\Project Outputs for New_ER_TMC_Two_Connectors - Copy\\Panel.zip",
+    "sha256": "3b865722ced5bb1924445e365624b119231f66958233764fc78a69d5bc5e156f",
+    "panel_step": "PANEL",
+    "board_step": "PCB1",
+    "container": "zip"
+  },
+  "mode": "panel",
+  "panel": {
+    "width": 182.626,
+    "height": 256.009607,
+    "outline": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        182.626,
+        0.0
+      ],
+      [
+        182.626,
+        256.009607
+      ],
+      [
+        0.0,
+        256.009607
+      ]
+    ],
+    "origin": {
+      "kind": "profile-lower-left",
+      "odb_x": -182.626013,
+      "odb_y": 1.3e-05
+    }
+  },
+  "grid": {
+    "cols": 3,
+    "rows": 5,
+    "pitch_x": 52.578,
+    "pitch_y": 51.308,
+    "uniform": true,
+    "source": "step-repeat"
+  },
+  "numbering": {
+    "first": "lower-left",
+    "order": "row-major"
+  },
+  "circuit_reference": {
+    "kind": "profile-lower-left",
+    "x": 12.698857,
+    "y": 0.0,
+    "board_x": -64.768616,
+    "board_y": 1.3e-05,
+    "rotation": 0.0,
+    "mirror": false
+  },
+  "circuit_outline": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      52.07,
+      0.0
+    ],
+    [
+      52.069997,
+      50.800013
+    ],
+    [
+      0.0,
+      50.800013
+    ]
+  ],
+  "circuits": [
+    {
+      "index": 1,
+      "dx": 0.0,
+      "dy": 0.0,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 2,
+      "dx": 52.578,
+      "dy": 0.0,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 3,
+      "dx": 105.156,
+      "dy": 0.0,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 4,
+      "dx": 0.0,
+      "dy": 51.308,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 5,
+      "dx": 52.578,
+      "dy": 51.308,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 6,
+      "dx": 105.156,
+      "dy": 51.308,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 7,
+      "dx": 0.0,
+      "dy": 102.616,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 8,
+      "dx": 52.578,
+      "dy": 102.616,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 9,
+      "dx": 105.156,
+      "dy": 102.616,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 10,
+      "dx": 0.0,
+      "dy": 153.924,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 11,
+      "dx": 52.578,
+      "dy": 153.924,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 12,
+      "dx": 105.156,
+      "dy": 153.924,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 13,
+      "dx": 0.0,
+      "dy": 205.232,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 14,
+      "dx": 52.578,
+      "dy": 205.232,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    },
+    {
+      "index": 15,
+      "dx": 105.156,
+      "dy": 205.232,
+      "rotation": 0.0,
+      "mirror": false,
+      "source": "step-repeat",
+      "residual": null
+    }
+  ],
+  "part_number_attribute": "Detex_P/N",
+  "placements": [
+    {
+      "designator": "R35",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 30.861013,
+      "y": 9.016987,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R30",
+      "part_name": "RESISTOR_20K_0603_1%",
+      "part_number": "107522-31-2002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 3.048013,
+      "y": 20.192987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-2002",
+        "Manufacturer": "Yageo",
+        "Manufacturer_Part_Number": "ERJ-3EKF2002V",
+        "Part_Number": "RC0603FR-1320KL",
+        "Value": "20K"
+      }
+    },
+    {
+      "designator": "R27",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 15.748013,
+      "y": 3.174987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "D12",
+      "part_name": "SCHOTTKY_DIODE_SOT23",
+      "part_number": "109821",
+      "package": "SOT-23",
+      "layer": "bottom",
+      "x": 31.496013,
+      "y": 17.398987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0433",
+        ".comp_mount_type": "smt",
+        "CT_(max)": "5Â pF",
+        "ComponentLink1Description": "Manufacturer URL",
+        "ComponentLink1URL": "http://www.infineon.com/",
+        "ComponentLink2Description": "Datasheet",
+        "ComponentLink2URL": "http://www.infineon.com/dgdl/bas40_bas140series.pdf?folderId=db3a30431400ef68011425f1ca2505e3&fileId=db3a304314dca389011518a57ed20e11",
+        "ComponentLink3Description": "Package Specification",
+        "ComponentLink3URL": "http://www.infineon.com/dgdl/SOT23-Package_Overview.pdf?folderId=db3a30431936bc4b0119532290053c66&fileId=db3a30431936bc4b0119533468123c85",
+        "Component_Side": "SMT",
+        "Configuration": "Dual",
+        "Detex_P/N": "109821 (NEW)",
+        "Green": "TRUE",
+        "IF_(max)": "120Â mA",
+        "Manufacturer": "Infineon",
+        "Manufacturer_Part_Number": "BAS40-04",
+        "Mounting_Technology": "Surface Mount",
+        "PackageDescription": "3-Pin Small Outline Transistor Package, 1.3 x 2.9 mm Body, 0.95 mm Pitch",
+        "PackageReference": "SOT23",
+        "PackageVersion": "Apr-08",
+        "Packing": "Reel",
+        "PartNumber": "BAS40-04",
+        "VF_(max)": "1,000Â mV",
+        "VR_(max)": "40Â V"
+      }
+    },
+    {
+      "designator": "R34",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 29.464013,
+      "y": 12.953987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R33",
+      "part_name": "RC0603FR-132K2L",
+      "part_number": "107522-31-2201",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 30.861013,
+      "y": 5.714987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-2201",
+        "Manufacturer": "Yageo",
+        "Manufacturer_Part_Number": "CRCW06032K20FKEA",
+        "Part_Number": "RC0603FR-132K2L",
+        "Value": "2.2K"
+      }
+    },
+    {
+      "designator": "FB2",
+      "part_name": "FERRITE_BEAD_30_OHM_@_100_MHZ_1500MA_0603",
+      "part_number": "109822",
+      "package": "FP-MMZ1608-0_8-IPC_B",
+      "layer": "bottom",
+      "x": 8.890013,
+      "y": 19.430987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "0603",
+        "Case_Code_(Imperial)": "0603",
+        "Case_Code_(Metric)": "1608",
+        "Component_Side": "SMT",
+        "DC_Resistance_(DCR)": "50mR",
+        "Detex_P/N": "109822 (NEW)",
+        "Height": "0.037inch",
+        "Impedance": "30R",
+        "Length": "0.063inch",
+        "Manufacturer_Part_Number": "MMZ1608R300ATD25",
+        "Max_Current_Rating": "1.5A",
+        "Max_DC_Current": "1.5A",
+        "Max_Operating_Temperature": "125°C",
+        "Min_Operating_Temperature": "-55°C",
+        "Mount": "Surface Mount",
+        "Number_of_Lines": "1",
+        "Package_Quantity": "4000",
+        "Packaging": "Tape and Reel",
+        "Ratings": "AEC-Q200",
+        "RoHS_Compliant": "Yes",
+        "Termination": "SMD/SMT",
+        "Test_Frequency": "100MHz",
+        "Tolerance": "25%",
+        "Weight": "7.1E-05oz",
+        "Width": "0.031inch"
+      }
+    },
+    {
+      "designator": "D11",
+      "part_name": "NRVB130LSFT1G",
+      "part_number": "107055-2",
+      "package": "FP-498-MFG",
+      "layer": "bottom",
+      "x": 26.162013,
+      "y": 21.843987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0394",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "107055",
+        "Detex_P/N": "107055-2 (NEW)",
+        "Manufacturer_Part_Number": "NRVB130T1G",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "D10",
+      "part_name": "SS34-E3/9AT",
+      "part_number": "101672-4",
+      "package": "FP-SMC-MFG",
+      "layer": "bottom",
+      "x": 48.260013,
+      "y": 39.369987,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0394",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "101672",
+        "Detex_P/N": "101672-4",
+        "Manufacturer_Part_Number": "SS34-E3/9AT",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "R29",
+      "part_name": "RESISTOR_100K_1%_0603",
+      "part_number": "107522-31-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 1.6002,
+      "y": 20.2184,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1003",
+        "Manufacturer_Part_Number": "CRCW0603100KFKED",
+        "Supplier_1": "Arrow Electronics",
+        "Supplier_Part_Number_1": "CRCW0603100KFKED",
+        "Value": "100K"
+      }
+    },
+    {
+      "designator": "D1",
+      "part_name": "SS34-E3/9AT",
+      "part_number": "101672-4",
+      "package": "FP-SMC-MFG",
+      "layer": "bottom",
+      "x": 13.208,
+      "y": 34.29,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "101672",
+        "Detex_P/N": "101672-4",
+        "Manufacturer_Part_Number": "SS34-E3/9AT",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "C4",
+      "part_name": "EEE-HB1V100R",
+      "part_number": "PP-5927-6",
+      "package": "FP-SC-MFG",
+      "layer": "bottom",
+      "x": 22.225,
+      "y": 18.288,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2696",
+        "Detex_P/N": "PP-5927-6 (NEW)",
+        "Manufacturer_Part_Number": "EEE-HB1V100R",
+        "Value": "10uF"
+      }
+    },
+    {
+      "designator": "U2",
+      "part_name": "TPS1H200AQDGNRQ1",
+      "part_number": "109824",
+      "package": "FP-DGN0008G-MFG",
+      "layer": "bottom",
+      "x": 5.715,
+      "y": 40.132,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109824 (NEW)",
+        "Manufacturer_Part_Number": "TPS1H200AQDGNRQ1"
+      }
+    },
+    {
+      "designator": "R5",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 2.794,
+      "y": 37.642813,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R4",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 8.0772,
+      "y": 36.767214,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R32",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 21.844013,
+      "y": 8.889987,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "F1",
+      "part_name": "MF-MSMF110/24X-2",
+      "part_number": "106238-2",
+      "package": "BOUR-MF-MSMF110-24X-2_V",
+      "layer": "bottom",
+      "x": 13.081,
+      "y": 39.497,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0630",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "106238",
+        "Detex_P/N": "106238-2",
+        "Manufacturer_Part_Number": "MF-MSMF110/24X-2",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "D9",
+      "part_name": "ZENER_DIODE_5.1V_0.225W_SOT-23-3",
+      "part_number": "109820",
+      "package": "SOT-23",
+      "layer": "bottom",
+      "x": 8.839187,
+      "y": 22.885362,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0437",
+        ".comp_mount_type": "smt",
+        "ComponentLink1Description": "Manufacturer URL",
+        "ComponentLink1URL": "http://www.onsemi.com/",
+        "ComponentLink2Description": "Datasheet",
+        "ComponentLink2URL": "http://www.onsemi.com/pub_link/Collateral/BZX84C2V4LT1-D.PDF",
+        "ComponentLink3Description": "Package Specification",
+        "ComponentLink3URL": "http://www.onsemi.cn/pub_link/Collateral/318-08.PDF",
+        "Component_Side": "SMT",
+        "DatasheetVersion": "Rev. 17",
+        "Detex_Drawing_Part_Number": "3481",
+        "Detex_P/N": "109820 (NEW)",
+        "Manufacturer": "On Semiconductor",
+        "Manufacturer_Part_Number": "BZX84B5V1LT1G",
+        "Mounting_Technology": "Surface Mount",
+        "PackageDescription": "3-Pin Small Outline Transistor, Body 2.92 x 1.3 mm, Pitch 0.95 mm",
+        "PackageReference": "SOT-23-3-318-08",
+        "PackageVersion": "Rev. AP, 11/2009",
+        "Packing": "Tape and Reel",
+        "PartNumber": "BZX84B5V1LT1G",
+        "RoHS": "Pb-Free",
+        "VZ_Typ_(V)": "5.1",
+        "Value": "5.1V"
+      }
+    },
+    {
+      "designator": "D6",
+      "part_name": "ZENER_DIODE_0.5W_28V",
+      "part_number": "PP-5975-12",
+      "package": "ONSC-SOD-123-2-425-04_V",
+      "layer": "bottom",
+      "x": 48.514013,
+      "y": 32.638987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0531",
+        ".comp_mount_type": "smt",
+        "ComponentLink1Description": "Manufacturer URL",
+        "ComponentLink1URL": "http://www.onsemi.com/",
+        "ComponentLink2Description": "Datasheet",
+        "ComponentLink2URL": "http://www.onsemi.cn/pub_link/Collateral/MMSZ5221BT1-D.PDF",
+        "ComponentLink3Description": "Package Specification",
+        "ComponentLink3URL": "http://www.onsemi.com/pub_link/Collateral/425-04.PDF",
+        "Component_Side": "SMT",
+        "DatasheetVersion": "Rev. 12",
+        "Detex_Drawing_Part_Number": "3481",
+        "Detex_P/N": "PP-5975-12 (NEW)",
+        "Manufacturer": "On Semiconductor",
+        "Manufacturer_Part_Number": "SZMMSZ5255BT1G",
+        "Mounting_Technology": "Surface Mount",
+        "P_Max_(W)": "0.5",
+        "PackageDescription": "2-Pin SOD, Body 1.6 x 2.69 mm",
+        "PackageReference": "SOD-123-2-425-04",
+        "PackageVersion": "Rev. G, 10/2009",
+        "Packing": "Tape and Reel",
+        "PartNumber": "SZMMSZ5255BT1G",
+        "RoHS": "Pb-Free",
+        "VZ_Typ_(V)": "28",
+        "Value": "28V"
+      }
+    },
+    {
+      "designator": "R26",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 30.861025,
+      "y": 20.700975,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R7",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 24.384,
+      "y": 12.954,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R2",
+      "part_name": "RESISTOR_100K_1%_0603",
+      "part_number": "107522-31-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 21.971013,
+      "y": 46.354987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1003",
+        "Manufacturer_Part_Number": "CRCW0603100KFKED",
+        "Supplier_1": "Arrow Electronics",
+        "Supplier_Part_Number_1": "CRCW0603100KFKED",
+        "Value": "100K"
+      }
+    },
+    {
+      "designator": "Q1",
+      "part_name": "NTR4171PT1G",
+      "part_number": "107053-3",
+      "package": "SOT-23",
+      "layer": "bottom",
+      "x": 19.177013,
+      "y": 46.608987,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0437",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "107053",
+        "Detex_P/N": "107053-3 (NEW)",
+        "Manufacturer_Part_Number": "NTR4171PT1G",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "D2",
+      "part_name": "1SMB5920BT3G",
+      "part_number": "PP-5975-13",
+      "package": "ONSC-SMB-2-403A-03_H_V",
+      "layer": "bottom",
+      "x": 21.209,
+      "y": 41.021,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0953",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "3481",
+        "Detex_P/N": "PP-5975-13 (NEW)",
+        "Manufacturer_Part_Number": "1SMB5920BT3G",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "R14",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 39.624025,
+      "y": 12.445975,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R13",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 41.148025,
+      "y": 12.445975,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R3",
+      "part_name": "CRCW060322K1FKEA",
+      "part_number": "107522-31-2212",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 5.588,
+      "y": 23.876,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-2212",
+        "Manufacturer_Part_Number": "CRCW060322K1FKEA",
+        "Value": "22.1K"
+      }
+    },
+    {
+      "designator": "R1",
+      "part_name": "CRCW060388K7FKEA",
+      "part_number": "107522-31-8872",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 5.588,
+      "y": 22.352,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-8872",
+        "Manufacturer_Part_Number": "CRCW060388K7FKEA",
+        "Value": "88.7K"
+      }
+    },
+    {
+      "designator": "L1",
+      "part_name": "744777118",
+      "part_number": "103094-2",
+      "package": "WE-PD_7345",
+      "layer": "bottom",
+      "x": 14.732,
+      "y": 25.908,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.1772",
+        ".comp_mount_type": "smt",
+        "Ambient_Temperature_Range_High": "85°C",
+        "Ambient_Temperature_Range_Low": "-40°C",
+        "Component_Side": "SMT",
+        "Current_Rating": "1.5A",
+        "DC_Resistance_(DCR)": "80mO",
+        "Depth": "7.3mm",
+        "Detex_Drawing_Part_Number": "103094",
+        "Detex_P/N": "103094-2 (NEW)",
+        "Height": "4.5mm",
+        "Inductance": "18µH",
+        "Length": "7.3mm",
+        "Manufacturer_Part_Number": "744777118",
+        "Max_DC_Current": "1.5A",
+        "Max_Operating_Temperature": "125°C",
+        "Min_Operating_Temperature": "-40°C",
+        "Number_of_Pins": "2",
+        "Packaging": "Tape & Reel",
+        "RoHS": "Compliant",
+        "Self_Resonant_Frequency": "17MHz",
+        "Shielding": "Shielded",
+        "Tolerance": "20%",
+        "Width": "7.3mm"
+      }
+    },
+    {
+      "designator": "C6",
+      "part_name": "CC1206KRX7R9BB104",
+      "part_number": "107523-1156-1003",
+      "package": "1206",
+      "layer": "bottom",
+      "x": 3.302,
+      "y": 33.655,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.1969",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-1156-1003",
+        "Manufacturer_Part_Number": "CC1206KRX7R9BB104",
+        "Value": "0.1uF"
+      }
+    },
+    {
+      "designator": "C5",
+      "part_name": "C1206C225K5RACTU",
+      "part_number": "107523-1156-2204",
+      "package": "1206",
+      "layer": "bottom",
+      "x": 3.302,
+      "y": 31.115,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0709",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-1156-2204",
+        "Manufacturer_Part_Number": "C1206C225K5RACTU",
+        "Value": "2.2uF"
+      }
+    },
+    {
+      "designator": "C3",
+      "part_name": "1206ZC226KAT2A",
+      "part_number": "107523-1126-2205",
+      "package": "1206",
+      "layer": "bottom",
+      "x": 19.938962,
+      "y": 25.273013,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.1969",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-1126-2205",
+        "Manufacturer_Part_Number": "1206ZC226KAT2A",
+        "Value": "22uF"
+      }
+    },
+    {
+      "designator": "R31",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 16.256,
+      "y": 17.272,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R22",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 36.068025,
+      "y": 12.445975,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "C17",
+      "part_name": "CAP_0603_50V",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 15.748013,
+      "y": 4.571987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "R24",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 6.857962,
+      "y": 5.207013,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "D8",
+      "part_name": "LTST-C190KRKT",
+      "part_number": "109818",
+      "package": "FP-LTST-C190KRKT-MFG",
+      "layer": "bottom",
+      "x": 6.857962,
+      "y": 8.001013,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "0603",
+        "Case_Code_(Imperial)": "0603",
+        "Case_Code_(Metric)": "1608",
+        "Color": "Red",
+        "Component_Side": "SMT",
+        "Depth": "0.8mm",
+        "Detex_P/N": "109818 (NEW)",
+        "Dominant_Wavelength": "631nm",
+        "Forward_Current": "30mA",
+        "Forward_Voltage": "2.4V",
+        "Height": "0.8mm",
+        "Illumination_Color": "Red",
+        "Lead_Free": "Lead Free",
+        "Length": "1.6mm",
+        "Lens_Color": "Colorless",
+        "Lens_Style": "Diffused",
+        "Lens_Transparency": "Clear",
+        "Luminous_Intensity": "54mcd",
+        "Manufacturer_Part_Number": "LTST-C190KRKT",
+        "Max_Operating_Temperature": "85°C",
+        "Min_Operating_Temperature": "-55°C",
+        "Mount": "Surface Mount",
+        "Number_of_Elements": "1",
+        "Number_of_LEDs": "1",
+        "Number_of_Pins": "2",
+        "Package_Quantity": "1",
+        "Packaging": "Tape and Reel",
+        "Power_Dissipation": "75mW",
+        "Power_Rating": "75mW",
+        "Radiation_Hardening": "No",
+        "Reverse_Voltage": "5V",
+        "SIZE_CODE": "0603",
+        "Test_Current": "20mA",
+        "Viewing_Angle": "130°",
+        "Wavelength": "639nm",
+        "Width": "0.8mm"
+      }
+    },
+    {
+      "designator": "D7",
+      "part_name": "FULL_COLOR_REVERSE_MOUNT_WATERCLEAR_SMD_LED",
+      "part_number": "109819",
+      "package": "WL-SFRW_1206_reverse_use",
+      "layer": "bottom",
+      "x": 28.067013,
+      "y": 7.238987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0492",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109819 (NEW)",
+        "Dominant_Wavelength": "525nm",
+        "Forward_Current": "100mA",
+        "Forward_Voltage": "2V",
+        "Height": "1.1mm",
+        "Length": "3.2mm",
+        "Lifecycle_Status": "Production",
+        "Luminous_Intensity": "250mcd",
+        "Manufacturer_Lifecycle_Status": "ACTIVE",
+        "Manufacturer_Part_Number": "156120M173000",
+        "Max_Operating_Temperature": "85°C",
+        "Max_Reverse_Voltage_(DC)": "5V",
+        "Min_Operating_Temperature": "-40°C",
+        "Peak_Wavelength": "468nm",
+        "Power_Dissipation": "60mW",
+        "RoHS": "Compliant",
+        "Viewing_Angle": "120°",
+        "Width": "1.6mm",
+        "YEOL": "1 = Estimated lifetime > 10 years"
+      }
+    },
+    {
+      "designator": "C16",
+      "part_name": "CAP_0603_50V",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 8.001013,
+      "y": 11.175987,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "R21",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 37.846025,
+      "y": 9.893973,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R20",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 6.096013,
+      "y": 11.188012,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R23",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 44.704025,
+      "y": 20.700975,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R25",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 16.256,
+      "y": 18.796,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "C1",
+      "part_name": "CC1206KRX7R9BB104",
+      "part_number": "107523-1156-1003",
+      "package": "1206",
+      "layer": "bottom",
+      "x": 8.762987,
+      "y": 27.304962,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-1156-1003",
+        "Manufacturer_Part_Number": "CC1206KRX7R9BB104",
+        "Value": "0.1uF"
+      }
+    },
+    {
+      "designator": "R28",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 9.144013,
+      "y": 5.206987,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R8",
+      "part_name": "RESISTOR_1K_1%_0603",
+      "part_number": "107522-31-1001",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 37.846013,
+      "y": 12.445987,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1001",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1001V",
+        "Value": "1K"
+      }
+    },
+    {
+      "designator": "R19",
+      "part_name": "RESISTOR_100K_1%_0603",
+      "part_number": "107522-31-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 30.861025,
+      "y": 22.097975,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1003",
+        "Manufacturer_Part_Number": "CRCW0603100KFKED",
+        "Supplier_1": "Arrow Electronics",
+        "Supplier_Part_Number_1": "CRCW0603100KFKED",
+        "Value": "100K"
+      }
+    },
+    {
+      "designator": "D5",
+      "part_name": "LTST-C190KRKT",
+      "part_number": "109818",
+      "package": "FP-LTST-C190KRKT-MFG",
+      "layer": "bottom",
+      "x": 35.306025,
+      "y": 9.905975,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "0603",
+        "Case_Code_(Imperial)": "0603",
+        "Case_Code_(Metric)": "1608",
+        "Color": "Red",
+        "Component_Side": "SMT",
+        "Depth": "0.8mm",
+        "Detex_P/N": "109818 (NEW)",
+        "Dominant_Wavelength": "631nm",
+        "Forward_Current": "30mA",
+        "Forward_Voltage": "2.4V",
+        "Height": "0.8mm",
+        "Illumination_Color": "Red",
+        "Lead_Free": "Lead Free",
+        "Length": "1.6mm",
+        "Lens_Color": "Colorless",
+        "Lens_Style": "Diffused",
+        "Lens_Transparency": "Clear",
+        "Luminous_Intensity": "54mcd",
+        "Max_Operating_Temperature": "85°C",
+        "Min_Operating_Temperature": "-55°C",
+        "Mount": "Surface Mount",
+        "Number_of_Elements": "1",
+        "Number_of_LEDs": "1",
+        "Number_of_Pins": "2",
+        "Package_Quantity": "1",
+        "Packaging": "Tape and Reel",
+        "Power_Dissipation": "75mW",
+        "Power_Rating": "75mW",
+        "Radiation_Hardening": "No",
+        "Reverse_Voltage": "5V",
+        "Test_Current": "20mA",
+        "Viewing_Angle": "130°",
+        "Wavelength": "639nm",
+        "Width": "0.8mm"
+      }
+    },
+    {
+      "designator": "C11",
+      "part_name": "CAP_CER_0.1UF_50V_X7R_0603",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 45.720013,
+      "y": 24.256987,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "U3",
+      "part_name": "TMC2209-LA",
+      "part_number": "109825",
+      "package": "FP-TMC2209-LA-IPC_C",
+      "layer": "bottom",
+      "x": 38.481,
+      "y": 20.447,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Automotive": "No",
+        "Category": "IC",
+        "ComponentLink2Description": "Datasheet",
+        "ComponentLink2URL": "https://www.trinamic.com/fileadmin/assets/Products/ICs_Documents/TMC2209_Datasheet_V103.pdf",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109825 (NEW)",
+        "Device_Class_L1": "Integrated Circuits (ICs)",
+        "Device_Class_L2": "Power Management ICs",
+        "Device_Class_L3": "Motor Drivers",
+        "Height": "0.9mm",
+        "Ipc_Land_Pattern_Name": "QFN50P500X500X85-28",
+        "Lead_Free": "Yes",
+        "Manufacturer": "Trinamic",
+        "Manufacturer_Part_Number": "TMC2209-LA",
+        "Max_Junction_Temp": "+125°C",
+        "Max_Power_Dissipation": "2.8W",
+        "Max_Supply_Voltage": "29V",
+        "Min_Supply_Voltage": "1.5V",
+        "Motor_Type": "Stepper",
+        "Nominal_Supply_Current": "7-7.5mA",
+        "Number_of_Outputs": "1",
+        "Octopart": "https://octopart.com/tmc2209-la-trinamic-105993617",
+        "Output_Current": "2.8A",
+        "Package": "0",
+        "RoHS": "TRUE",
+        "Standoff_Height": "0mm",
+        "Temperature": "-40°C to +125°C",
+        "Temperature_Range_High": "+125°C",
+        "Temperature_Range_Low": "-40°C"
+      }
+    },
+    {
+      "designator": "U4",
+      "part_name": "ATMEGA4808-AFR",
+      "part_number": "109826",
+      "package": "FP-C04-074-IPC_A",
+      "layer": "bottom",
+      "x": 14.239479,
+      "y": 10.916013,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "TQFP",
+        "Component_Side": "SMT",
+        "Core_Architecture": "AVR",
+        "Detex_P/N": "109826 (NEW)",
+        "Frequency": "20MHz",
+        "Interface": "I2C",
+        "Manufacturer_Part_Number": "ATMEGA4808-AFR",
+        "Max_Operating_Temperature": "125°C",
+        "Memory_Size": "48KB",
+        "Memory_Type": "FLASH",
+        "Min_Operating_Temperature": "-40°C",
+        "Mount": "Surface Mount",
+        "Number_of_I/Os": "27",
+        "Number_of_Pins": "32",
+        "Oscillator_Type": "Internal",
+        "Packaging": "Cut Tape",
+        "Peripherals": "Brown-out Detect/Reset",
+        "Series": "megaAVR® 0"
+      }
+    },
+    {
+      "designator": "U1",
+      "part_name": "LMR50410YQDBVRQ1",
+      "part_number": "109823",
+      "package": "FP-DBV0006A-MFG",
+      "layer": "bottom",
+      "x": 5.587987,
+      "y": 27.812962,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109823 (NEW)",
+        "Manufacturer_Part_Number": "LMR50410YQDBVRQ1"
+      }
+    },
+    {
+      "designator": "R18",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 34.544025,
+      "y": 12.445975,
+      "rotation": 270.0,
+      "rotation_raw": 90.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R17",
+      "part_name": "MCR18EZHFLR110",
+      "part_number": "107522-11-1107",
+      "package": "FP-MCR18-IPC_B",
+      "layer": "bottom",
+      "x": 44.958013,
+      "y": 26.161987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "1206",
+        "Case_Code_(Imperial)": "1206",
+        "Case_Code_(Metric)": "3216",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-11-1107",
+        "Height": "0.026inch",
+        "Length": "0.126inch",
+        "Manufacturer_Part_Number": "ERJ-8BSFR11V",
+        "Max_Power_Dissipation": "250mW",
+        "Number_of_Terminations": "2",
+        "Package_Quantity": "5000",
+        "Packaging": "Tape and Reel",
+        "Resistance": "110mR",
+        "Resistor_Type": "Thick Film",
+        "RoHS_Compliant": "Yes",
+        "Series": "MCR18",
+        "Temperature_Coefficient": "600ppm/°C",
+        "Tolerance": "1%",
+        "Value": "0.11",
+        "Width": "0.063inch"
+      }
+    },
+    {
+      "designator": "R16",
+      "part_name": "RESISTOR_10K_1%_0603",
+      "part_number": "107522-31-1002",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 44.704025,
+      "y": 16.128975,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0217",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Component_Type": "Resistors",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-31-1002",
+        "Manufacturer": "Panasonic / Panasonic ECG",
+        "Manufacturer_Part_Number": "ERJ-3EKF1002V",
+        "Value": "10K"
+      }
+    },
+    {
+      "designator": "R15",
+      "part_name": "MCR18EZHFLR110",
+      "part_number": "107522-11-1107",
+      "package": "FP-MCR18-IPC_B",
+      "layer": "bottom",
+      "x": 31.750013,
+      "y": 26.161987,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Case/Package": "1206",
+        "Case_Code_(Imperial)": "1206",
+        "Case_Code_(Metric)": "3216",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2691",
+        "Detex_P/N": "107522-11-1107",
+        "Height": "0.026inch",
+        "Length": "0.126inch",
+        "Manufacturer_Part_Number": "ERJ-8BSFR11V",
+        "Max_Power_Dissipation": "250mW",
+        "Number_of_Terminations": "2",
+        "Package_Quantity": "5000",
+        "Packaging": "Tape and Reel",
+        "Resistance": "110mR",
+        "Resistor_Type": "Thick Film",
+        "RoHS_Compliant": "Yes",
+        "Series": "MCR18",
+        "Temperature_Coefficient": "600ppm/°C",
+        "Tolerance": "1%",
+        "Value": "0.11",
+        "Width": "0.063inch"
+      }
+    },
+    {
+      "designator": "D4",
+      "part_name": "SMAJ26CA",
+      "part_number": "109817-2",
+      "package": "FP-SMAJ-CA-MFG",
+      "layer": "bottom",
+      "x": 25.273013,
+      "y": 33.654987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Automotive": "No",
+        "Breakdown_Voltage": "28.9V",
+        "Category": "Diode",
+        "Clamping_Voltage": "42.1V",
+        "ComponentLink2Description": "Datasheet",
+        "ComponentLink2URL": "https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diodes/littelfuse_tvs_diode_smaj_datasheet.pdf.pdf",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109817-2 (NEW)",
+        "Device_Class_L1": "Circuit Protection",
+        "Device_Class_L2": "TVS Diodes",
+        "Device_Class_L3": "unset",
+        "Digikey_Description": "TVS DIODE 26V 42.1V DO214AC",
+        "Direction": "Bidirectional",
+        "Height": "2.29mm",
+        "Lead_Free": "Yes",
+        "Manufacturer": "Littelfuse Inc",
+        "Manufacturer_Part_Number": "SMAJ26CA",
+        "Max_Junction_Temp": "+150°C",
+        "Mouser_Description": "SMAJ Series 42.1 V 0.4 kW Surface Mount Bi-Directional TVS Diode - DO-214AC",
+        "Number_of_Channels": "1",
+        "Octopart": "https://octopart.com/smaj26ca-littelfuse-350028",
+        "Package": "SMAJ-CA",
+        "Peak_Pulse_Current": "9.5A",
+        "Peak_Pulse_Power": "400W",
+        "Reverse_Standoff_Voltage": "26V",
+        "RoHS": "TRUE",
+        "Temperature": "-65°C to +150°C",
+        "Temperature_Range_High": "+150°C",
+        "Temperature_Range_Low": "-65°C"
+      }
+    },
+    {
+      "designator": "D3",
+      "part_name": "SMBJ24CA-E3/52",
+      "part_number": "109817-1",
+      "package": "VISH-DO-214AA-A-2_V",
+      "layer": "bottom",
+      "x": 13.081,
+      "y": 43.561,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0961",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_P/N": "109817-1 (NEW)",
+        "Manufacturer_Part_Number": "SMBJ24CA-E3/52",
+        "Value": ""
+      }
+    },
+    {
+      "designator": "C13",
+      "part_name": "CAP_CER_0.1UF_50V_X7R_0603",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 34.544025,
+      "y": 16.763975,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "C8",
+      "part_name": "UMK325BJ106MM-T",
+      "part_number": "107523-6156-1005",
+      "package": "1210",
+      "layer": "bottom",
+      "x": 48.514013,
+      "y": 29.463987,
+      "rotation": 0.0,
+      "rotation_raw": 0.0,
+      "attributes": {
+        ".comp_height": "0.1063",
+        ".comp_mount_type": "smt",
+        "Applications": "GeneralPurpose",
+        "Capacitance": "10µF",
+        "Catalog_Drawings": "xMKSeries_1210_2.5",
+        "Category": "Capacitors",
+        "Component_Side": "SMT",
+        "Datasheet_URL": "https://datasheet.ciiva.com/15922/1153umk325bj106mm-t-15922661.pdf",
+        "Datasheet_Version": "Mar-13",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-6156-1005",
+        "Family": "CeramicCapacitors",
+        "Features": "-",
+        "Height_-_Seated_(Max)": "-",
+        "Lead_Spacing": "-",
+        "Lead_Style": "-",
+        "Manufacturer": "Taiyo Yuden",
+        "Manufacturer_Part_Number": "KGM32AR71H106KL",
+        "Manufacturer_URL": "http://www.t-yuden.com/",
+        "Mounting_Type": "SurfaceMount,MLCC",
+        "Online_Catalog": "MSeries",
+        "Operating_Temperature": "-55degC~85degC",
+        "Other_Names": "587-2225-6",
+        "Package_/_Case": "1210(3225Metric)",
+        "Package_Description": "2-Pin Surface Mount Device, Body 3.2 x 2.5 mm, Height 2.7 mm",
+        "Package_Reference": "C1210",
+        "Packaging": "Digi-Reel",
+        "Ratings": "-",
+        "SIZE_CODE": "1210",
+        "Series": "M",
+        "Size_/_Dimension": "0.126_Lx0.098_W(3.20mmx2.50mm)",
+        "Standard_Package": "1",
+        "THERMAL_DIELECTRIC": "X5R",
+        "Temperature_Coefficient": "X5R",
+        "Thickness_(Max)": "0.106_(2.70mm)",
+        "Tolerance": "±20%",
+        "Value": "10uF",
+        "Voltage_-_Rated": "50V",
+        "WORKING_VOLTAGE_(DC)": "50"
+      }
+    },
+    {
+      "designator": "C9",
+      "part_name": "UMK325BJ106MM-T",
+      "part_number": "107523-6156-1005",
+      "package": "1210",
+      "layer": "bottom",
+      "x": 27.686025,
+      "y": 29.209975,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.1063",
+        ".comp_mount_type": "smt",
+        "Applications": "GeneralPurpose",
+        "Capacitance": "10µF",
+        "Catalog_Drawings": "xMKSeries_1210_2.5",
+        "Category": "Capacitors",
+        "Component_Side": "SMT",
+        "Datasheet_URL": "https://datasheet.ciiva.com/15922/1153umk325bj106mm-t-15922661.pdf",
+        "Datasheet_Version": "Mar-13",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-6156-1005",
+        "Family": "CeramicCapacitors",
+        "Features": "-",
+        "Height_-_Seated_(Max)": "-",
+        "Lead_Spacing": "-",
+        "Lead_Style": "-",
+        "Manufacturer": "Taiyo Yuden",
+        "Manufacturer_Part_Number": "KGM32AR71H106KL",
+        "Manufacturer_URL": "http://www.t-yuden.com/",
+        "Mounting_Type": "SurfaceMount,MLCC",
+        "Online_Catalog": "MSeries",
+        "Operating_Temperature": "-55degC~85degC",
+        "Other_Names": "587-2225-6",
+        "Package_/_Case": "1210(3225Metric)",
+        "Package_Description": "2-Pin Surface Mount Device, Body 3.2 x 2.5 mm, Height 2.7 mm",
+        "Package_Reference": "C1210",
+        "Packaging": "Digi-Reel",
+        "Ratings": "-",
+        "SIZE_CODE": "1210",
+        "Series": "M",
+        "Size_/_Dimension": "0.126_Lx0.098_W(3.20mmx2.50mm)",
+        "Standard_Package": "1",
+        "THERMAL_DIELECTRIC": "X5R",
+        "Temperature_Coefficient": "X5R",
+        "Thickness_(Max)": "0.106_(2.70mm)",
+        "Tolerance": "±20%",
+        "Value": "10uF",
+        "Voltage_-_Rated": "50V"
+      }
+    },
+    {
+      "designator": "C12",
+      "part_name": "CC0603KRX7R9BB223",
+      "part_number": "107523-3156-2202",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 45.466025,
+      "y": 18.287975,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "22nF",
+        "Case/Package": "0603",
+        "Case_Code_(Imperial)": "0603",
+        "Case_Code_(Metric)": "1608",
+        "Component_Side": "SMT",
+        "Depth": "0.8mm",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-2202",
+        "Dielectric": "X7R",
+        "Dielectric_Material": "Ceramic",
+        "Halogen_Free": "Halogen Free",
+        "Height": "0.8mm",
+        "Insulation_Resistance": "100GR",
+        "Lead_Free": "Lead Free",
+        "Length": "1.6mm",
+        "Manufacturer_Part_Number": "CC0603KRX7R9BB223",
+        "Max_Operating_Temperature": "125°C",
+        "Min_Operating_Temperature": "-55°C",
+        "Mount": "Surface Mount",
+        "Number_of_Pins": "2",
+        "Package_Quantity": "1",
+        "Packaging": "Tape and Reel",
+        "REACH_SVHC": "No SVHC",
+        "Radiation_Hardening": "No",
+        "Resistor_Type": "Ceramic",
+        "RoHS_Compliant": "Yes",
+        "SIZE_CODE": "0603",
+        "Series": "CC",
+        "THERMAL_DIELECTRIC": "",
+        "Termination": "SMD/SMT",
+        "Thickness": "0.035inch",
+        "Tolerance": "10%",
+        "Voltage": "50V",
+        "Voltage_Rating": "50V",
+        "Voltage_Rating_(DC)": "50V",
+        "Width": "0.031inch"
+      }
+    },
+    {
+      "designator": "C15",
+      "part_name": "CAP_CER_4.7UF_16V_X7R_0603",
+      "part_number": "107523-3156-4704",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 41.897986,
+      "y": 16.128987,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-4704",
+        "Manufacturer_Part_Number": "GRM188Z71C475KE21J",
+        "SIZE_CODE": "0603",
+        "THERMAL_DIELECTRIC": "",
+        "Value": "4.7uF"
+      }
+    },
+    {
+      "designator": "C10",
+      "part_name": "CAP_CER_0.1UF_50V_X7R_0603",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 30.861025,
+      "y": 24.256975,
+      "rotation": 180.0,
+      "rotation_raw": 180.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "C14",
+      "part_name": "CAP_CER_0.1UF_50V_X7R_0603",
+      "part_number": "107523-3156-1003",
+      "package": "0603",
+      "layer": "bottom",
+      "x": 43.942025,
+      "y": 18.287975,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Capacitance": "0.1uF",
+        "Component_Side": "SMT",
+        "Design_Item_ID": "CAP_0603_50V",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-3156-1003",
+        "Manufacturer_Part_Number": "C1608X7R1H104K080AA",
+        "SIZE_CODE": "0603",
+        "Source": "Schematic-Lib-PhilsLab.SchLib",
+        "THERMAL_DIELECTRIC": "X7R"
+      }
+    },
+    {
+      "designator": "C2",
+      "part_name": "1206ZC226KAT2A",
+      "part_number": "107523-1126-2205",
+      "package": "1206",
+      "layer": "bottom",
+      "x": 22.224962,
+      "y": 25.273013,
+      "rotation": 90.0,
+      "rotation_raw": 270.0,
+      "attributes": {
+        ".comp_height": "0.0000",
+        ".comp_mount_type": "smt",
+        "Component_Side": "SMT",
+        "Detex_Drawing_Part_Number": "2690",
+        "Detex_P/N": "107523-1126-2205",
+        "Manufacturer_Part_Number": "1206ZC226KAT2A",
+        "Value": "22uF"
+      }
+    }
+  ],
+  "panel_parts": [],
+  "component_edits": [
+    {
+      "designator": "C1",
+      "level": "board",
+      "package": "1206"
+    },
+    {
+      "designator": "C2",
+      "level": "board",
+      "package": "1206"
+    },
+    {
+      "designator": "C3",
+      "level": "board",
+      "package": "1206"
+    },
+    {
+      "designator": "C4",
+      "level": "board",
+      "part_number": "PP-5927-6"
+    },
+    {
+      "designator": "C5",
+      "level": "board",
+      "package": "1206"
+    },
+    {
+      "designator": "C6",
+      "level": "board",
+      "package": "1206"
+    },
+    {
+      "designator": "C7",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "C8",
+      "level": "board",
+      "package": "1210"
+    },
+    {
+      "designator": "C9",
+      "level": "board",
+      "package": "1210"
+    },
+    {
+      "designator": "C10",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C11",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C12",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C13",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C14",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C15",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C16",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C17",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "C18",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole",
+      "part_number": "PP-5410-35"
+    },
+    {
+      "designator": "D2",
+      "level": "board",
+      "part_number": "PP-5975-13"
+    },
+    {
+      "designator": "D3",
+      "level": "board",
+      "part_number": "109817-1"
+    },
+    {
+      "designator": "D4",
+      "level": "board",
+      "part_number": "109817-2"
+    },
+    {
+      "designator": "D5",
+      "level": "board",
+      "part_number": "109818"
+    },
+    {
+      "designator": "D6",
+      "level": "board",
+      "part_number": "PP-5975-12"
+    },
+    {
+      "designator": "D7",
+      "level": "board",
+      "part_number": "109819"
+    },
+    {
+      "designator": "D8",
+      "level": "board",
+      "part_number": "109818"
+    },
+    {
+      "designator": "D9",
+      "level": "board",
+      "part_number": "109820",
+      "package": "SOT-23"
+    },
+    {
+      "designator": "D11",
+      "level": "board",
+      "part_number": "107055-2"
+    },
+    {
+      "designator": "D12",
+      "level": "board",
+      "part_number": "109821",
+      "package": "SOT-23"
+    },
+    {
+      "designator": "FB1",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "FB2",
+      "level": "board",
+      "part_number": "109822"
+    },
+    {
+      "designator": "J1",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole"
+    },
+    {
+      "designator": "J2",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole"
+    },
+    {
+      "designator": "J3",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole"
+    },
+    {
+      "designator": "J4",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole"
+    },
+    {
+      "designator": "J5",
+      "level": "board",
+      "removed": true,
+      "reason": "through-hole"
+    },
+    {
+      "designator": "J6",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "L1",
+      "level": "board",
+      "part_number": "103094-2"
+    },
+    {
+      "designator": "Q1",
+      "level": "board",
+      "part_number": "107053-3",
+      "package": "SOT-23"
+    },
+    {
+      "designator": "R1",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R2",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R3",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R4",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R5",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R6",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "R7",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R8",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R9",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "R10",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "R11",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "R12",
+      "level": "board",
+      "removed": true,
+      "reason": "not-populated"
+    },
+    {
+      "designator": "R13",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R14",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R16",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R18",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R19",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R20",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R21",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R22",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R23",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R24",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R25",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R26",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R27",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R28",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R29",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R30",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R31",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R32",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R33",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R34",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "R35",
+      "level": "board",
+      "package": "0603"
+    },
+    {
+      "designator": "U1",
+      "level": "board",
+      "part_number": "109823"
+    },
+    {
+      "designator": "U2",
+      "level": "board",
+      "part_number": "109824"
+    },
+    {
+      "designator": "U3",
+      "level": "board",
+      "part_number": "109825"
+    },
+    {
+      "designator": "U4",
+      "level": "board",
+      "part_number": "109826"
+    }
+  ],
+  "fiducials": [
+    {
+      "name": "F(6.351,12.703)",
+      "x": 6.35141,
+      "y": 12.703007,
+      "source": "copper",
+      "layer": "bottom",
+      "diameter": 1.000001
+    },
+    {
+      "name": "F(6.351,243.307)",
+      "x": 6.351422,
+      "y": 243.306587,
+      "source": "copper",
+      "layer": "bottom",
+      "diameter": 1.000001
+    },
+    {
+      "name": "F(176.275,243.307)",
+      "x": 176.274578,
+      "y": 243.306587,
+      "source": "copper",
+      "layer": "bottom",
+      "diameter": 1.000001
+    }
+  ],
+  "acknowledged_warnings": [
+    {
+      "code": "datum_origin_differ",
+      "subject": "PCB1"
+    },
+    {
+      "code": "unknown_field",
+      "subject": "misc/info"
+    }
+  ],
+  "layer_roles": {
+    "copper_bottom": "BOTTOM_LAYER",
+    "copper_top": "TOP_LAYER",
+    "mask_bottom": "BOTTOM_SOLDER",
+    "mask_top": "TOP_SOLDER",
+    "paste_bottom": "BOTTOM_PASTE",
+    "paste_top": "TOP_PASTE"
+  },
+  "panel_level_designators": [],
+  "single_board": null,
+  "settings": {
+    "tolerances": {
+      "crosscheck": 0.01,
+      "fit_residual": 0.01,
+      "rotation": 0.05,
+      "grid": 0.01,
+      "centroid_on_pads": 0.25,
+      "pattern_shift": 0.1,
+      "pad_match_radius": 1.0,
+      "fiducial_merge": 0.05
+    },
+    "fiducials": {
+      "patterns": [
+        "FID*"
+      ],
+      "min_diameter": 0.5,
+      "max_diameter": 3.0,
+      "clearance": 1.0,
+      "mask_margin": 0.05
+    },
+    "copy_suffix_regex": "",
+    "part_number_attribute": "",
+    "circuit1_corner": "lower-left",
+    "numbering_order": "row-major",
+    "circuit_reference": "profile-lower-left",
+    "panel_origin": "profile-lower-left",
+    "step_repeat_anchor": "datum"
+  }
+}
