@@ -49,6 +49,7 @@ gui_exe = EXE(
     debug=False,
     strip=False,
     upx=False,
+    icon="pcb.ico",
 )
 cli_exe = EXE(
     PYZ(cli.pure),
@@ -60,6 +61,7 @@ cli_exe = EXE(
     debug=False,
     strip=False,
     upx=False,
+    icon="pcb.ico",
 )
 
 coll = COLLECT(
