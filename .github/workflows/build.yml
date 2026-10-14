@@ -79,6 +79,7 @@ jobs:
           python -c "from pathlib import Path; from tests.synthetic.odbgen import sr_panel; sr_panel(compress_members=True).write_tgz(Path('smoke.tgz'))"
           python -c "from pathlib import Path; from tests.synthetic.projects import make_project; from panelimport.model.project_file import save_project; p = make_project(); p.source.path = 'none.tgz'; save_project(p, Path('smoke.panel.json'))"
           cp smoke.tgz smoke.panel.json dist/PanelImporter/
+          unset LD_LIBRARY_PATH  # setup-python's libpython must not stand in for the bundle's
           cd dist/PanelImporter
           ./panelimport analyze smoke.tgz
           ./panelimport iss smoke.panel.json

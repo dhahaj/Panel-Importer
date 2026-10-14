@@ -58,7 +58,7 @@ folder on `windows-latest` (running both executables with Python removed from `P
 and on `ubuntu-22.04`, and uploads them as the `PanelImporter-windows` and
 `PanelImporter-linux` artifacts. The Linux build runs on distributions with glibc 2.35
 or newer; the GUI needs the usual X11/Wayland libraries (on Debian/Ubuntu,
-`libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libxcb-cursor0`).
+`libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libxcb-cursor0`).
 
 ### Releases
 
