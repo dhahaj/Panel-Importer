@@ -1,4 +1,4 @@
-"""Rule: analysis/, io/ and model/ never import Qt."""
+"""Rule: analysis/, io/, model/ and iss/ never import Qt."""
 
 import ast
 import subprocess
@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1] / "panelimport"
-QT_FREE = [PKG / "io", PKG / "analysis", PKG / "model", PKG / "settings.py", PKG / "session.py", PKG / "report.py", PKG / "components_csv.py", PKG / "cli.py"]
+QT_FREE = [PKG / "io", PKG / "analysis", PKG / "model", PKG / "iss", PKG / "settings.py", PKG / "session.py", PKG / "report.py", PKG / "components_csv.py", PKG / "cli.py"]
 
 
 def _imports(path: Path) -> set[str]:
@@ -33,7 +33,8 @@ def test_no_qt_imports_in_core_sources():
 
 def test_core_import_does_not_load_qt():
     code = (
-        "import sys, panelimport.cli, panelimport.analysis.pipeline, panelimport.model.project_file;"
+        "import sys, panelimport.cli, panelimport.analysis.pipeline, panelimport.model.project_file,"
+        " panelimport.iss.writer, panelimport.iss.compare, panelimport.iss.report;"
         "print(any(m.startswith('PySide6') for m in sys.modules))"
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout

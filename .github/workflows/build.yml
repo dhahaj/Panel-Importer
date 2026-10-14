@@ -38,14 +38,20 @@ jobs:
         shell: pwsh
         run: |
           python -c "from pathlib import Path; from tests.synthetic.odbgen import sr_panel; sr_panel(compress_members=True).write_tgz(Path('smoke.tgz'))"
+          python -c "from pathlib import Path; from tests.synthetic.projects import make_project; from panelimport.model.project_file import save_project; p = make_project(); p.source.path = 'none.tgz'; save_project(p, Path('smoke.panel.json'))"
           Copy-Item smoke.tgz dist\PanelImporter\
+          Copy-Item smoke.panel.json dist\PanelImporter\
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'Python' }) -join ';'
           Push-Location dist\PanelImporter
           .\panelimport.exe analyze smoke.tgz
           if ($LASTEXITCODE -ne 0) { throw "panelimport.exe analyze failed: $LASTEXITCODE" }
+          .\panelimport.exe iss smoke.panel.json
+          if ($LASTEXITCODE -ne 0) { throw "panelimport.exe iss failed: $LASTEXITCODE" }
+          .\panelimport.exe iss-compare smoke.iss smoke.iss
+          if ($LASTEXITCODE -ne 0) { throw "panelimport.exe iss-compare failed: $LASTEXITCODE" }
           $p = Start-Process -FilePath .\PanelImporter.exe -ArgumentList "--smoke-test", "smoke.tgz" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "PanelImporter.exe --smoke-test failed: $($p.ExitCode)" }
-          Remove-Item smoke.tgz
+          Remove-Item smoke.tgz, smoke.panel.json, smoke.iss
           Pop-Location
       - uses: actions/upload-artifact@v4
         with:

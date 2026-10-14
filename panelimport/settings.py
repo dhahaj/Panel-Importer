@@ -91,6 +91,9 @@ class Settings:
 
     @classmethod
     def from_dict(cls, data: dict) -> Settings:
+        # The file's "iss" section holds the Phase 2 settings (panelimport.iss.settings).
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items() if k not in OTHER_SECTIONS}
         settings = from_jsonable(cls, data)
         problems = settings.validate()
         if problems:
@@ -107,14 +110,33 @@ class Settings:
             return cls.from_dict(json.load(fh))
 
     def save(self, path: str | os.PathLike | None = None) -> Path:
+        """Write the settings, keeping the file's other sections (``iss``) as they are."""
         path = Path(path) if path else default_settings_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(self.to_dict(), fh, indent=2)
-            fh.write("\n")
-        os.replace(tmp, path)
-        return path
+        data = self.to_dict()
+        if path.exists():
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    old = json.load(fh)
+            except (OSError, ValueError):
+                old = {}
+            if isinstance(old, dict):
+                data.update({k: v for k, v in old.items() if k in OTHER_SECTIONS})
+        return write_settings_file(path, data)
+
+
+#: Sections of the settings file that belong to other parts of the program.
+OTHER_SECTIONS = frozenset({"iss"})
+
+
+def write_settings_file(path: Path, data: dict) -> Path:
+    """Write the settings file atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+    return path
 
 
 def user_config_dir() -> Path:

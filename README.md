@@ -1,14 +1,18 @@
-# Panel Importer — Phase 1
+# Panel Importer
 
-Desktop tool that imports an Altium **panel** exported as **ODB++** and identifies the
-panel: circuit count, step-and-repeat, circuit 1, every placement in circuit-relative
-coordinates, and the fiducials. The confirmed panel is saved as `<name>.panel.json`,
-which Phase 2 (ISS output) reads. Phase 1 writes no machine program and never changes
-the export.
+Desktop tool that imports an Altium **panel** exported as **ODB++**, identifies it, and
+writes the **Juki ISS** placement program for it.
+
+* **Phase 1** identifies the panel: circuit count, step-and-repeat, circuit 1, every
+  placement in circuit-relative coordinates, and the fiducials. The confirmed panel is
+  saved as `<name>.panel.json`. Phase 1 never changes the export.
+* **Phase 2** reads a confirmed `<name>.panel.json` and writes `<name>.iss`, which
+  JaNets opens and fills with component data from its own database; it also compares
+  any two programs (ISS or JaNets `.x21`) part by part. See [Phase 2: ISS output](#phase-2-iss-output).
 
 ```
 import ODB++ → automatic detection → review issues → confirm panel → pick fiducials
-            → add, edit or remove components (optional) → save project
+            → add, edit or remove components (optional) → save project → export ISS
 ```
 
 ## Running it
@@ -21,6 +25,11 @@ panelimport-gui                  # the GUI (or: python -m panelimport)
 panelimport analyze Panel.tgz    # the same summary and issues the GUI shows
 panelimport analyze Panel.tgz --components-csv parts.csv   # also write the components
 panelimport verify Panel.panel.json   # saved project vs. its source (SHA-256 + re-analysis)
+
+panelimport iss Panel.panel.json -o Program.iss            # write the ISS program
+panelimport iss Panel.panel.json --check                   # checks and report only
+panelimport iss Panel.panel.json --set panel_rotation=90 --set clamp_offset_y=91.313
+panelimport iss-compare Generated.iss D:\ER_RevF8\Program.x21   # part-by-part diff
 ```
 
 `panelimport analyze` options: `--panel-step`, `--board-step`, `--first` (corner of
@@ -28,6 +37,13 @@ circuit 1), `--order`, `--reference`, `--copy-suffix REGEX`, `--part-number-attr
 `--panel-level FID1,FID2`, `--bom bom.csv`, `--components-csv FILE`, `--settings file.json`,
 `--json`, `-v`.
 Exit code 0 = no errors, 1 = errors found, 2 = could not open.
+
+`panelimport iss` options: `-o FILE` (default `<name>.iss` next to the project),
+`--check`, `--set KEY=VALUE` (repeatable), `--settings file.json`, `-v` (also list the
+allocations and placements). Exit code 0 = written with no errors, 1 = errors (nothing
+written), 2 = could not open. `panelimport iss-compare A B` options: `--tolerance MM`
+(default 0.01), `--all` (every part, not only the ones that differ), `--angle-direction
+ccw|cw`. Exit code 0 = same placements, 1 = different, 2 = could not open.
 
 ### Windows build (no Python needed on the target machine)
 
@@ -80,6 +96,18 @@ executables with Python removed from `PATH`, and uploads the folder as the
 * **File → Export components CSV…** — writes the Components tab's table to
   `<name>.components.csv` (see [Components CSV](#components-csv)). It needs no confirmed
   panel and also works from a read-only project.
+* **File → Export ISS…** (`Ctrl+E`) — once the panel is confirmed (or from a saved
+  project whose export is missing). The dialog shows the main ISS settings (pwbId, panel
+  rotation, clamp offset, angle direction and offset), the side being written (from the
+  placements) with the flip axis for a bottom-layer panel, a summary, the checks, and a
+  preview of the panel **as the machine will see it** (after the flip and rotation, P
+  marked, FRONT rail at the bottom), so the flip axis can be checked against the real
+  panel. Every change re-runs the checks; errors disable **Write**. Writes `<name>.iss`
+  next to the project by default; *Save these settings as the default* stores them in
+  the settings file (the pwbId stays per project).
+* **File → Compare programs…** — pick two ISS/`.x21` files and see the part-by-part
+  table, the summary line and the panel, circuit and fiducial comparison. Rows can be
+  selected and sorted; nothing is edited.
 
 Every edit (roles, numbering, reference, part-number mapping, fiducials, acknowledgements,
 panel-level confirmations, single-board setup, component edits, confirmation) is
@@ -209,6 +237,159 @@ STEP-REPEAT anchor are **settings** (Edit → Settings), stored as JSON in
 `%APPDATA%\PanelImporter\settings.json` (Windows) or `~/.config/panelimport/settings.json`.
 The project file keeps a copy of the settings it was made with.
 
+## Phase 2: ISS output
+
+`panelimport/iss/` reads a confirmed project and writes a Juki ISS program from it alone:
+the export, DETEX_New.mdb and every other database are never opened. Component records
+carry the name JaNets looks up (the Detex part number); size, package, pick and vision
+data, mark teaching, nozzles, feeders and rotation corrections come from JaNets or the
+machine.
+
+### The frame
+
+Every ISS program has one origin **P**; JaNets, CircuitCAM and issgen all use
+
+```
+placement on panel   = P + allocation[k] + placementPosition          (allocation angle 0)
+circuit k outline LL = P + allocation[k] + circuitLayoutOffset         (model/pwbData)
+pwbLayoutOffset      = panel lower-right corner − P                    (model/pwbData)
+fiducial on panel    = P + markPosition
+clampOffset.y        = panel height / 2
+```
+
+with P in different places (the reader tests check these equations on every reference
+program). Phase 2 computes everything panel-absolute from the project, applies one
+**machine transform** for the side being written — the bottom flip if any, then the panel
+rotation, then a shift that puts the panel's lower-left corner at 0,0 — and derives the
+ISS values from the transformed geometry:
+
+* **P** is circuit 1's transformed reference point, moved to the lower-left of its
+  transformed outline. With the default `profile-lower-left` reference P *is* that
+  corner and `circuitLayoutOffset` is 0,0. With another reference, P keeps the
+  reference's offset from the outline's lower-left (turned with the circuit), so an
+  untransformed panel has P at the reference point and `circuitLayoutOffset` = the
+  outline's lower-left, exactly as the frame table in the brief says.
+* Each **allocation** is the change in a circuit's P (the same circuit-frame point placed
+  by that circuit); its angle is the circuit's rotation relative to circuit 1, as seen by
+  the machine (a mirror reverses it). Allocations are assumed to turn about the allocation
+  point; rotated allocations warn until that is confirmed in JaNets.
+* Each **placement position** is the transformed position in circuit 1 minus P.
+* **Angles** follow the geometry: a part's angle is the direction of its X axis after the
+  transform, so a left-right flip maps θ to 180° − θ, a front-back flip to −θ, and the
+  panel rotation is added. Then `bottom_angle_offset` (bottom only), `angle_direction`
+  (`cw` negates) and `angle_offset`, normalized to [0, 360).
+
+The same code handles top, bottom, rotated panels and rotated circuit 1. A panel is placed
+on **one side**: the placements' layer decides which; both layers is an error. Only the
+fiducials on that layer are written. `referenceSide` stays `FRONT` (the conveyor's fixed
+rail, not the board side).
+
+**Bottom-layer panels** are written as the machine sees them, turned over. With the
+defaults (`bottom_flip = left-right`, `panel_rotation = auto`: a portrait panel turns 90°
+CCW so its long side runs along the conveyor) the transform is program (u, v) = (H − y,
+W − x), the one the ER pilot program used.
+
+### What is written
+
+The skeleton of `T3_strip_both.iss` (the tests compare element trees): UTF-8 with BOM,
+CRLF, 2-space indent; self-closing tags always `<tag />` (JaNets hangs on `<tag/>`);
+numbers with at most 4 decimals, no trailing zeros, no exponent, never `-0`; attributes
+in the known-good order; Juki's `witdh` and `connecterHeight`; text escaped. A small
+dedicated writer produces it, and every file is checked before it replaces anything: no
+`[^ ]/>`, it parses, and it reads back to the same program.
+
+* `NONMATRIX` with every allocation listed, `bocMarkType PWBBOC` (what JaNets converts
+  issgen's MATRIX into). `circuit_layout = matrix` writes `divideNumber`/`matrixPitch`
+  for full uniform grids; JaNets numbers MATRIX circuits from the grid's lower-left, so
+  P moves to that circuit (positions on the panel do not change).
+* One component record per distinct component name, in first-use order: the part number,
+  or the part name with a warning. `comment` = the first of `comment_attributes` present
+  (`DSC`, `Description`, `Comment`), else the part name. Sizes are 0 (JaNets fills them).
+  `model/componentData` is left out (`model_component_stubs` adds stubs, test only).
+* Fiducial mark names are the project's names when they are plain identifiers
+  (`FID1`), else `F1`, `F2`, `F3` (copper fiducials are named like `F(6.351,12.703)`).
+* Panel-level parts that are not fiducials are left out with a warning.
+
+### Settings
+
+In the Phase 1 settings file under the `iss` key; `--set key=value` overrides one value
+for one run, and the report lists every value used.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `pwb_id` | project file name stem | `pwbId` in core and model |
+| `panel_rotation` | `auto` | `auto` (portrait → 90° CCW, landscape → 0) or 0/90/180/270 CCW, after the bottom flip |
+| `bottom_flip` | `left-right` | `left-right` (x → W − x) or `front-back` (y → H − y) |
+| `bottom_angle_offset` | 0 | added to bottom angles after mirroring |
+| `pwb_thickness`, `back_height` | 1.6, 37 | mm |
+| `clamp_offset_y` | `auto` | `auto` = program panel height / 2, or mm |
+| `circuit_layout` | `nonmatrix` | `matrix` for full uniform grids only |
+| `angle_direction`, `angle_offset` | `ccw`, 0 | `cw` negates every angle; the offset is added to placement angles |
+| `header_completion` | `zero` | `zero` (CircuitCAM, issgen) or `total` (T3, JaNets) |
+| `model_component_stubs` | false | test switch: stub `model/componentData` |
+| `component_size` | `zero` | `body` is refused for now: the project file carries no package bodies |
+| `comment_attributes` | `DSC, Description, Comment` | first one present wins |
+| `line_name`, `line_id`, `mark_name`, `traceability` | `Line`, 1, `BOCMARK01`, `TwoDimensions` | `traceability` may be `NOUSE` |
+
+### Checks before writing
+
+Errors stop the write; warnings go in the report and the dialog.
+
+| Code | Check | Severity |
+| --- | --- | --- |
+| `project_invalid` | not a readable v1/v2 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
+| `no_fiducials`, `too_many_fiducials` | fewer than 2 / more than 3 fiducials on the placements' layer | Error |
+| `mirrored_circuit` | any circuit, or circuit 1 itself, mirrored | Error |
+| `rotated_circuit` | an allocation angle ≠ 0 (never tested in JaNets) | Warning |
+| `no_part_number` / `no_component_name` | part name used / no name at all | Warning / Error |
+| `component_name_chars` | a name with characters outside `A-Z a-z 0-9 - _ .` | Warning |
+| `duplicate_designator` | a designator twice in circuit 1 | Error |
+| `mixed_sides` | placements on both layers | Error |
+| `bottom_angles_unverified` | a bottom-layer program (angle mapping not yet verified) | Warning |
+| `panel_parts_skipped` | panel-level parts that are not fiducials, listed | Warning |
+| `outside_circuit` / `outside_panel` | a placement outside the circuit outline / any placement or fiducial outside the panel | Warning / Error |
+| `no_placements` | nothing to place | Error |
+| `source_changed` | the project's source export changed (written from the project anyway) | Warning |
+| `matrix_layout`, `component_size_body` | a setting the project cannot satisfy | Error |
+
+A saved project is confirmed by construction (Phase 1 saves only confirmed panels); the
+GUI exports only a confirmed panel.
+
+### Comparing programs
+
+`iss-compare` and **Compare programs…** read ISS and `.x21` into one model (only the
+elements listed in `iss/reader.py`; structure that is not understood is reported as a
+note, never fatal), turn both into panel-absolute positions with their own P, match the
+circuits by where their parts are (so differently numbered programs still line up), and
+list per designator and circuit ΔX, ΔY and Δangle, the parts and components only in one
+program, the circuits and allocations, the fiducials, panel size, clamp offset, layout
+type and header completeness. Every change a program can store (4 decimals) is listed;
+positions *match* within the tolerance (0.01 mm), flagged `*` beyond it. Angles are
+reported, not judged; the summary says whether the differences are one constant offset
+or vary per part (reel corrections).
+
+Examples from the reference programs:
+
+* `ER_issgen_panel3.iss` vs JaNets' save of it: 7 changed parts (rotations of C4, D9,
+  D12, Q1, U2, U3; R35 Y −0.009; D12 X −0.001), MATRIX → NONMATRIX, an extra component `0`.
+* **Golden (ER Rev F8, bottom layer, default settings)** vs the programs that ran the pilot:
+  the generated program uses the ODB++ row pitch 52.578 mm; the pilot used 53.086 mm. The
+  first row of circuits matches within 0.05 mm, the second and third rows are offset by
+  0.508 and 1.016 mm in program Y, fiducials within 0.05 mm (0.022 mm from the panel
+  outline), clamp offset 91.313. Angles vary per part. Against `ER_RevF8_production.x21`,
+  three parts entered by hand in JaNets (C12, D10, L1; not in CircuitCAM's program) are
+  0.05–0.35 mm off, and R15, R17 (107522-31-1107 vs the project's 107522-11-1107) and
+  R23 (107522-31-2002 vs 107522-31-1001) carry other part numbers in production.
+
+### Diagnosing JaNets problems
+
+JaNets fails silently. `OpenFilePath Start` without `End` in
+`C:\JUKI\JaNets\Log\Juki.Iss.IntelliPE.ProgramEditor.log` means it is stuck opening;
+two 64-byte slots from the same PC in `C:\ComponentDatabase\Data\DETEX_New.ldb` is the
+July deadlock. Flip one compatibility switch at a time (`header_completion`,
+`circuit_layout`, `traceability`, …) and use `iss-compare` against the `.x21` JaNets
+saves, so a change is never guessed at.
+
 ## Project file
 
 `<name>.panel.json` is the direct serialization of `panelimport.model.panel.PanelProject`:
@@ -250,6 +431,14 @@ QT_QPA_PLATFORM=offscreen pytest -q
   the rule that `io/`, `analysis/` and `model/` never import Qt.
 * `tests/fixtures/` takes Daniel's real exports with an `expected.json` each — see
   [tests/fixtures/README.md](tests/fixtures/README.md). The test is skipped until fixtures are added.
+* Phase 2 (`tests/test_iss_*.py`): frame round trips (project → ISS → reader → panel
+  positions within 0.0001 mm) over every reference kind × circuit-1 corner (synthetic and
+  through Phase 1's pipeline), non-uniform grids, panel rotations, a rotated circuit 1,
+  rotated allocations and both bottom flips with and without rotation; three bottom-layer
+  panels worked out by hand; the T3 skeleton, serialization rules and self-test; every
+  check; the reference equations on every program in `tests/fixtures/iss/`; the `.x21`
+  reader against issgen's program; and the ER golden comparison (`Panel.zip` +
+  `Panel.panel.json`). Tests whose reference files are missing are skipped.
 
 ## Code layout
 
@@ -263,8 +452,10 @@ panelimport/
   analysis/    roles, step_repeat, grouping (flattened), transforms (fit, grid,
                numbering), checks, fiducials, layers, edits (component edits,
                suggestions), pipeline, result, snapshot
+  iss/         Phase 2: settings, mapping (project → ISS frame), checks, writer,
+               reader (ISS and .x21), compare, report — never imports Qt
   gui/         main_window, canvas, geometry, import/settings/single-board/component
-               dialogs, controller (undo), panels/
+               dialogs, iss_dialogs (Export ISS, Compare programs), controller (undo), panels/
 packaging/     PyInstaller spec and entry points
 ```
 
@@ -282,8 +473,25 @@ packaging/     PyInstaller spec and entry points
 - [ ] Bottom-side placements: read and flagged by layer; whether the machine places them
       is for Phase 2.
 
-Not in Phase 1: ISS output, the DETEX_New.mdb lookup, rotation correction (beyond
+Not in Phase 1: ISS output (Phase 2), the DETEX_New.mdb lookup, rotation correction (beyond
 editing a component's rotation by hand), editing the PCB data itself (component edits
 are stored in the project, not in the export), per-circuit edits (an edit applies to
 every circuit), and the Pick-and-Place CSV + Gerber input (to be built after the ODB++
 path passes acceptance).
+
+## Open questions (Phase 2, to answer in JaNets and on the machine)
+
+- [ ] **Bottom-layer angles:** the exact mapping from Altium's bottom rotation to the
+      program angle (`bottom_angles_unverified` warns until then). Against the pilot
+      programs the differences vary per part (reel corrections), not one offset.
+- [ ] **Placement angle convention:** are Juki angles CCW like the project?
+      `angle_direction` and `angle_offset` cover either answer.
+- [ ] **Rotated allocations:** do allocation angles turn about the allocation point, and
+      which way? Assumed about the point, CCW; `rotated_circuit` warns.
+- [ ] **Header completion counts:** do they change anything (`zero` vs `total`)?
+- [ ] **Component `0`:** where did the extra component in `panel3.x21` come from?
+- [ ] **Panel-level parts** besides fiducials: they are left out with a warning.
+- [ ] **Line configuration:** does transfer to the machine need JaNets' full
+      `lineConfiguration/configuration` block? Opening does not.
+- [ ] **ER fiducials:** the saved ER project picked F(6.351,243.307) where the pilot used
+      F(176.275,12.703) (both on the bottom copper); the golden test uses the pilot's three.

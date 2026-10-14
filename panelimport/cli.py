@@ -3,6 +3,10 @@
 
 ``panelimport verify <project>`` checks a saved project against its source export
 (SHA-256 and re-analysis).
+
+``panelimport iss <project>`` writes the Juki ISS program (Phase 2); ``--check`` only
+runs the checks.  ``panelimport iss-compare A B`` compares two programs (ISS or
+JaNets ``.x21``) part by part in panel coordinates.
 """
 
 from __future__ import annotations
@@ -17,6 +21,12 @@ from panelimport.analysis.edits import edits_summary
 from panelimport.components_csv import write_components_csv
 from panelimport.io.bom import BomError
 from panelimport.io.odb import OdbOpenError
+from panelimport.iss.checks import prepare
+from panelimport.iss.compare import DEFAULT_TOLERANCE, compare_programs, format_comparison
+from panelimport.iss.reader import ReadError, read_program
+from panelimport.iss.report import format_report as format_iss_report
+from panelimport.iss.settings import IssSettings
+from panelimport.iss.writer import IssWriteError, default_iss_path, project_stem, write_iss
 from panelimport.model.panel import Decisions
 from panelimport.model.project_file import ProjectFileError, check_source, load_project
 from panelimport.model.serialize import SerializationError
@@ -121,8 +131,40 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _iss_settings(args: argparse.Namespace) -> IssSettings:
+    settings = IssSettings.load(args.settings) if args.settings else IssSettings.load()
+    if args.set:
+        settings = settings.with_overrides(args.set)
+    return settings
+
+
+def cmd_iss(args: argparse.Namespace) -> int:
+    settings = _iss_settings(args)
+    project = load_project(args.project)
+    source_issue = check_source(project, args.project)[1] if project.source.path else None
+    prepared = prepare(project, settings, pwb_id=project_stem(args.project), source_issue=source_issue)
+    written = None
+    if not args.check and prepared.can_write:
+        out = args.output or default_iss_path(args.project)
+        try:
+            written = str(write_iss(prepared, out))
+        except IssWriteError as exc:
+            print(format_iss_report(prepared, failure=str(exc), verbose=args.verbose))
+            return 1
+    print(format_iss_report(prepared, written=written, verbose=args.verbose))
+    return 1 if prepared.errors else 0
+
+
+def cmd_iss_compare(args: argparse.Namespace) -> int:
+    a = read_program(args.a)
+    b = read_program(args.b)
+    cmp = compare_programs(a, b, tolerance=args.tolerance, angle_direction=args.angle_direction)
+    print(format_comparison(cmp, all_rows=args.all, name_a=args.a, name_b=args.b))
+    return 0 if cmp.summary().startswith("Same") else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="panelimport", description="Panel Importer (Phase 1)")
+    parser = argparse.ArgumentParser(prog="panelimport", description="Panel Importer (Phase 1 import, Phase 2 ISS output)")
     parser.add_argument("--version", action="version", version=f"panelimport {__version__}")
     parser.add_argument("--log", default="WARNING", help="log level (DEBUG, INFO, WARNING)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -147,6 +189,27 @@ def build_parser() -> argparse.ArgumentParser:
     v = sub.add_parser("verify", help="check a saved project against its source export")
     v.add_argument("project", help="<name>.panel.json")
     v.set_defaults(func=cmd_verify)
+
+    i = sub.add_parser("iss", help="write the Juki ISS program for a confirmed project (Phase 2)")
+    i.add_argument("project", help="<name>.panel.json")
+    i.add_argument("-o", "--output", help="ISS file to write (default: <name>.iss next to the project)")
+    i.add_argument("--check", action="store_true", help="run the checks and print the report; write nothing")
+    i.add_argument(
+        "--set", action="append", metavar="KEY=VALUE", help="override one ISS setting for this run (repeatable)"
+    )
+    i.add_argument("--settings", help="settings JSON file (default: the user's settings; ISS settings under 'iss')")
+    i.add_argument("-v", "--verbose", action="store_true", help="also list the allocations and placements")
+    i.set_defaults(func=cmd_iss)
+
+    c = sub.add_parser("iss-compare", help="compare two programs (ISS or .x21) part by part in panel coordinates")
+    c.add_argument("a", help="first program (.iss or .x21)")
+    c.add_argument("b", help="second program (.iss or .x21)")
+    c.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE, help="position tolerance in mm (default 0.01)")
+    c.add_argument("--all", action="store_true", help="list every part, not only the ones that differ")
+    c.add_argument(
+        "--angle-direction", choices=("ccw", "cw"), default="ccw", help="how both programs' angles turn (default ccw)"
+    )
+    c.set_defaults(func=cmd_iss_compare)
     return parser
 
 
@@ -169,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=getattr(logging, str(args.log).upper(), logging.WARNING), format="%(levelname)s %(name)s: %(message)s")
     try:
         return args.func(args)
-    except (OdbOpenError, ProjectFileError, SessionError, SerializationError, BomError, OSError) as exc:
+    except (OdbOpenError, ProjectFileError, SessionError, SerializationError, BomError, ReadError, OSError) as exc:
         print(f"panelimport: {exc}", file=sys.stderr)
         return 2
 
