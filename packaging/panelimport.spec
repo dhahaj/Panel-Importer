@@ -29,6 +29,7 @@ OTHER_UNUSED = ["tkinter", "matplotlib", "pytest", "IPython", "PyInstaller"]
 gui = Analysis(
     [os.path.join(SPECPATH, "gui_main.py")],
     pathex=[ROOT],
+    datas=[(os.path.join(SPECPATH, "pcb.ico"), ".")],  # the window icon (panelimport/app.py)
     excludes=QT_UNUSED + OTHER_UNUSED,
     noarchive=False,
 )

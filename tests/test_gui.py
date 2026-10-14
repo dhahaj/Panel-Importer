@@ -257,6 +257,16 @@ def test_layout_is_remembered(app, tmp_path, boxes):
     dispose(w2)
 
 
+def test_windows_show_the_pcb_icon(window):
+    from pathlib import Path
+
+    from PySide6.QtGui import QIcon
+
+    pcb = QIcon(str(Path(__file__).parents[1] / "packaging" / "pcb.ico"))
+    assert not pcb.isNull()
+    assert window.windowIcon().pixmap(32).toImage() == pcb.pixmap(32).toImage()
+
+
 def test_single_board_flow(window, tmp_path, app):
     from panelimport.model.panel import SingleBoardSetup
     from tests.test_single_board import single_board_job

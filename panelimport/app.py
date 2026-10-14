@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from panelimport.model.serialize import SerializationError
 from panelimport.settings import Settings
+
+# packaging/pcb.ico; the Windows build (packaging/panelimport.spec) copies it to sys._MEIPASS.
+ICON = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / "packaging"), "pcb.ico")
 
 
 def dark_palette() -> QPalette:
@@ -39,6 +43,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     app = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     app.setStyle("Fusion")
     app.setPalette(dark_palette())
+    app.setWindowIcon(QIcon(str(ICON)))
     return app
 
 
@@ -48,6 +53,8 @@ def smoke_test(path: str | None) -> int:
 
     from panelimport.gui.main_window import MainWindow
 
+    if QApplication.windowIcon().isNull():  # pcb.ico missing from the build
+        return 4
     tmp = QTemporaryDir()
     win = MainWindow(Settings(), QSettings(tmp.filePath("smoke.ini"), QSettings.IniFormat))
     win.show()
