@@ -62,12 +62,14 @@ def _spin(value: float, lo: float, hi: float, suffix: str, decimals: int = 4) ->
 # -------------------------------------------------------------------- preview
 class ProgramPreview(QWidget):
     """The program's panel as the machine sees it: lower-left at 0,0, X along the
-    conveyor, the FRONT (fixed) rail at the bottom.  Drawn from the program itself."""
+    conveyor, the FRONT (fixed) rail at the bottom.  Drawn from the program itself, in the
+    canvas's layer colours."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, colors: dict[str, QColor] | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setMinimumSize(320, 220)
         self.prepared: Prepared | None = None
+        self.colors = {s.key: s.color for s in theme.LAYERS} | (colors or {})
 
     def set_prepared(self, prepared: Prepared | None) -> None:
         self.prepared = prepared
@@ -92,23 +94,23 @@ class ProgramPreview(QWidget):
         def pt(x: float, y: float) -> QPointF:
             return QPointF(ox + x * scale, oy - y * scale)
 
-        p.setPen(QPen(theme.STYLE["panel_outline"].color, 1.5))
+        p.setPen(QPen(self.colors["panel_outline"], 1.5))
         p.setBrush(Qt.NoBrush)
         p.drawRect(QRectF(pt(0, prog.height), pt(prog.width, 0)))
-        circuit_pen = QPen(theme.STYLE["circuit_outlines"].color, 1)
+        circuit_pen = QPen(self.colors["circuit_outlines"], 1)
         for c, number in zip(geom.circuits, layout.circuit_numbers):
             p.setPen(circuit_pen)
             p.drawPolygon(QPolygonF([pt(x, y) for x, y in c.outline]))
             cx = sum(x for x, _ in c.outline) / 4
             cy = sum(y for _, y in c.outline) / 4
             p.drawText(QRectF(pt(cx, cy) - QPointF(20, 8), pt(cx, cy) + QPointF(20, 8)), Qt.AlignCenter, str(number))
-        dot = theme.STYLE["centroids_bottom" if layout.machine.side == "bottom" else "centroids_top"].color
+        dot = self.colors["centroids_bottom" if layout.machine.side == "bottom" else "centroids_top"]
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(dot))
         for part in geom.placements:
             p.drawEllipse(pt(part.x, part.y), 1.6, 1.6)
         p.setBrush(Qt.NoBrush)
-        p.setPen(QPen(theme.STYLE["fiducials"].color, 1.5))
+        p.setPen(QPen(self.colors["fiducials"], 1.5))
         for _name, x, y in geom.fiducials:
             p.drawEllipse(pt(x, y), 5, 5)
         # P, the program origin.
@@ -135,6 +137,7 @@ class ExportIssDialog(QDialog):
         pwb_id: str,
         confirmed: bool = True,
         qsettings: QSettings | None = None,
+        colors: dict[str, QColor] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -187,7 +190,7 @@ class ExportIssDialog(QDialog):
         summary_box = QGroupBox("Summary")
         QVBoxLayout(summary_box).addWidget(self.summary)
 
-        self.preview = ProgramPreview()
+        self.preview = ProgramPreview(colors)
         preview_box = QGroupBox("As the machine sees it")
         QVBoxLayout(preview_box).addWidget(self.preview)
 

@@ -1,7 +1,8 @@
 """The panel canvas: a QGraphicsView in panel coordinates (mm, Y up).
 
 * Pan with the middle mouse button, zoom with the wheel towards the cursor, ``F`` fits.
-* Layers are toggleable; a step's layer is drawn once per instance via item transforms.
+* Layers are toggleable and recolourable; a step's layer is drawn once per instance via
+  item transforms.
 * Centroid and fiducial markers keep a constant pixel size; hovering shows details.
 * Measure tool: two clicks give ΔX, ΔY and the distance (snapping to markers).
 * "View from bottom" mirrors the display only.
@@ -31,6 +32,7 @@ from panelimport.gui import theme
 from panelimport.gui.geometry import LayerGeometry, build_layer_geometry, polygon_path, qtransform
 
 LABEL_ZOOM = 6.0  # pixels per mm above which designator labels are drawn
+TINT = 0  # item data: (layer key, alpha override or None) of the colour an item is drawn in
 
 
 class FeatureLayerItem(QGraphicsItem):
@@ -68,6 +70,7 @@ class MarkerItem(QGraphicsItem):
 
     show_labels = False
     view_mirrored = False
+    label_color = theme.STYLE["labels"].color
 
     def __init__(
         self, kind: str, key: tuple, color: QColor, label: str, rotation: float | None = None, state: str = ""
@@ -104,7 +107,10 @@ class MarkerItem(QGraphicsItem):
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget=None) -> None:
         painter.setRenderHint(QPainter.Antialiasing, True)
-        color = theme.HIGHLIGHT if (self.isSelected() or self._hover) else self.color
+        if self.isSelected() or self._hover:
+            color = theme.HIGHLIGHT
+        else:  # circuit-level fiducials are always grey
+            color = self.color if self.selectable_fiducial else theme.CIRCUIT_FIDUCIAL
         pen = QPen(color, 2.0 if self.isSelected() else 1.3)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
@@ -153,10 +159,22 @@ class MarkerItem(QGraphicsItem):
                 painter.drawLine(QPointF(0, 0), QPointF(dx * 7, dy * 7))
         if MarkerItem.show_labels or self.isSelected() or self._hover:
             label_color = {"edited": theme.EDITED, "added": theme.ADDED, "removed": theme.REMOVED}.get(
-                self.state, theme.STYLE["labels"].color
+                self.state, MarkerItem.label_color
             )
             painter.setPen(QPen(label_color))
             painter.drawText(QPointF(9, 4), self.label)
+
+
+def _recolor(item: QGraphicsItem, color: QColor) -> None:
+    if isinstance(item, (FeatureLayerItem, MarkerItem)):
+        item.color = color
+        item.update()
+    elif isinstance(item, QGraphicsSimpleTextItem):
+        item.setBrush(color)
+    elif isinstance(item, QGraphicsPathItem):
+        pen = item.pen()
+        pen.setColor(color)
+        item.setPen(pen)
 
 
 class PanelCanvas(QGraphicsView):
@@ -184,6 +202,8 @@ class PanelCanvas(QGraphicsView):
         self.analysis: PanelAnalysis | None = None
         self.layers: dict[str, list[QGraphicsItem]] = {s.key: [] for s in theme.LAYERS}
         self.visible: dict[str, bool] = {s.key: s.visible for s in theme.LAYERS}
+        self.colors: dict[str, QColor] = {s.key: QColor(s.color) for s in theme.LAYERS}
+        MarkerItem.label_color = self.colors["labels"]
         self._geo_cache: dict[tuple, LayerGeometry] = {}
         self._geo_job = None
         self._markers: list[MarkerItem] = []
@@ -231,11 +251,20 @@ class PanelCanvas(QGraphicsView):
             self.fit()
         self._suppress_selection = False
 
-    def _add(self, layer: str, item: QGraphicsItem) -> QGraphicsItem:
+    def _add(self, layer: str, item: QGraphicsItem, tint: str | None = None, alpha: int | None = None) -> QGraphicsItem:
+        """Add ``item`` to ``layer``.  It is drawn in the colour of layer ``tint`` (default
+        ``layer``) with an optional fixed ``alpha``, and follows that colour when it changes."""
         item.setZValue(theme.STYLE[layer].z)
+        item.setData(TINT, (tint or layer, alpha))
         self.scene().addItem(item)
         self.layers[layer].append(item)
         return item
+
+    def _color(self, key: str, alpha: int | None = None) -> QColor:
+        color = QColor(self.colors[key])
+        if alpha is not None:
+            color.setAlpha(alpha)
+        return color
 
     def _geometry(self, draw) -> LayerGeometry | None:
         key = (id(draw.job), draw.step.lower(), draw.layer.lower())
@@ -252,12 +281,12 @@ class PanelCanvas(QGraphicsView):
             geo = self._geometry(draw)
             if geo is None or geo.count == 0:
                 continue
-            self._add(draw.role, FeatureLayerItem(geo, theme.STYLE[draw.role].color, qtransform(draw.transform)))
+            self._add(draw.role, FeatureLayerItem(geo, self._color(draw.role), qtransform(draw.transform)))
 
         # Outlines
         if a.panel_outline:
             item = QGraphicsPathItem(polygon_path(a.panel_outline))
-            pen = QPen(theme.STYLE["panel_outline"].color, 1.5)
+            pen = QPen(self._color("panel_outline"), 1.5)
             pen.setCosmetic(True)
             item.setPen(pen)
             self._add("panel_outline", item)
@@ -266,14 +295,14 @@ class PanelCanvas(QGraphicsView):
         font.setPointSize(14)
         for c in a.circuits:
             item = QGraphicsPathItem(polygon_path(c.outline))
-            pen = QPen(theme.STYLE["circuit_outlines"].color, 1.2, Qt.DashLine)
+            pen = QPen(self._color("circuit_outlines"), 1.2, Qt.DashLine)
             pen.setCosmetic(True)
             item.setPen(pen)
             item.setToolTip(self._circuit_tip(c))
             self._add("circuit_outlines", item)
             label = QGraphicsSimpleTextItem(str(c.index))
             label.setFont(font)
-            label.setBrush(theme.STYLE["circuit_outlines"].color)
+            label.setBrush(self._color("circuit_outlines"))
             label.setFlag(QGraphicsItem.ItemIgnoresTransformations)
             br = label.boundingRect()
             label.setPos(QPointF(*c.center))
@@ -294,15 +323,13 @@ class PanelCanvas(QGraphicsView):
                     continue
                 item = QGraphicsPathItem(path)
                 item.setTransform(qtransform(c.transform))
-                color = QColor(theme.STYLE["bodies"].color)
-                if side == "bottom":
-                    color = QColor(theme.STYLE["centroids_bottom"].color)
-                    color.setAlpha(110)
-                pen = QPen(color, 1.0)
+                # Bottom bodies are drawn in the bottom centroid colour, faded.
+                tint, alpha = ("bodies", None) if side == "top" else ("centroids_bottom", 110)
+                pen = QPen(self._color(tint, alpha), 1.0)
                 pen.setCosmetic(True)
                 item.setPen(pen)
                 item.setAcceptedMouseButtons(Qt.NoButton)
-                self._add("bodies", item)
+                self._add("bodies", item, tint, alpha)
 
         # Centroids per circuit
         snap = []
@@ -310,7 +337,7 @@ class PanelCanvas(QGraphicsView):
             for p in a.placements:
                 x, y, rot = a.circuit_position(p, c)
                 layer = "centroids_top" if p.layer == "top" else "centroids_bottom"
-                m = MarkerItem("placement", (p.designator, c.index), theme.STYLE[layer].color, p.designator, rot, p.state)
+                m = MarkerItem("placement", (p.designator, c.index), self._color(layer), p.designator, rot, p.state)
                 m.setPos(x, y)
                 m.setToolTip(self._placement_tip(a, p, c, x, y, rot))
                 self._add(layer, m)
@@ -318,14 +345,14 @@ class PanelCanvas(QGraphicsView):
                 snap.append((x, y))
             for p in a.removed_placements:
                 x, y, rot = a.circuit_position(p, c)
-                m = MarkerItem("placement", (p.designator, c.index), theme.STYLE["removed"].color, p.designator, None, "removed")
+                m = MarkerItem("placement", (p.designator, c.index), self._color("removed"), p.designator, None, "removed")
                 m.setPos(x, y)
                 m.setToolTip(self._placement_tip(a, p, c, x, y, rot))
                 self._add("removed", m)
                 self._markers.append(m)
         for pp in [*a.panel_parts, *a.removed_panel_parts]:
             removed = pp.state == "removed"
-            color = theme.STYLE["removed" if removed else "panel_parts"].color
+            color = self._color("removed" if removed else "panel_parts")
             m = MarkerItem("panel_part", (pp.designator,), color, pp.designator, None if removed else pp.rotation, pp.state)
             m.setPos(pp.x, pp.y)
             status = status_text(pp)
@@ -343,8 +370,7 @@ class PanelCanvas(QGraphicsView):
         # Fiducials
         chosen = {f.name: i + 1 for i, f in enumerate(a.fiducials)}
         for f in a.fiducial_candidates:
-            color = theme.STYLE["fiducials"].color if f.selectable else theme.CIRCUIT_FIDUCIAL
-            m = MarkerItem("fiducial", (f.name,), color, f.name if f.selectable else "")
+            m = MarkerItem("fiducial", (f.name,), self._color("fiducials"), f.name if f.selectable else "")
             m.selectable_fiducial = f.selectable
             m.selected_number = chosen.get(f.name)
             m.setPos(f.x, f.y)
@@ -398,6 +424,18 @@ class PanelCanvas(QGraphicsView):
             return
         for item in self.layers.get(key, []):
             item.setVisible(visible)
+
+    def set_layer_color(self, key: str, color: QColor) -> None:
+        """Recolour a layer in place, so the view, the selection and a measurement stay."""
+        self.colors[key] = QColor(color)
+        if key == "labels":
+            MarkerItem.label_color = self.colors[key]
+        for items in self.layers.values():
+            for item in items:
+                tint, alpha = item.data(TINT)
+                if tint == key:
+                    _recolor(item, self._color(key, alpha))
+        self.viewport().update()
 
     def _apply_visibility(self) -> None:
         for key, items in self.layers.items():

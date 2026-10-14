@@ -257,6 +257,130 @@ def test_layout_is_remembered(app, tmp_path, boxes):
     dispose(w2)
 
 
+def test_layer_colours_change_in_place(window, tmp_path, app):
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsSimpleTextItem
+
+    from panelimport.gui import theme
+    from panelimport.gui.canvas import TINT, FeatureLayerItem, MarkerItem
+
+    job = sr_panel(n_parts=20)
+    add_copper(job.steps["pcb"], 50, seed=1)
+    open_panel(window, tmp_path, app, job)
+    canvas = window.canvas
+    canvas.select_designator("U1", 1)
+    selected = canvas.scene().selectedItems()
+    count = len(canvas.scene().items())
+
+    def items(layer, tint=None):
+        return [i for i in canvas.layers[layer] if i.data(TINT)[0] == (tint or layer)]
+
+    copper = QColor(255, 0, 0, 90)
+    window._set_layer_color("copper_top", copper)
+    assert items("copper_top") and all(isinstance(i, FeatureLayerItem) and i.color == copper for i in items("copper_top"))
+    window._set_layer_color("centroids_top", QColor("#123456"))
+    assert all(m.color == QColor("#123456") for m in items("centroids_top"))
+    window._set_layer_color("circuit_outlines", QColor("#00ff00"))
+    outlines = [i for i in items("circuit_outlines") if isinstance(i, QGraphicsPathItem)]
+    numbers = [i for i in items("circuit_outlines") if isinstance(i, QGraphicsSimpleTextItem)]
+    assert len(outlines) == len(numbers) == 6
+    assert all(i.pen().color() == QColor("#00ff00") for i in outlines)
+    assert all(i.brush().color() == QColor("#00ff00") for i in numbers)
+    # Bottom bodies follow the bottom centroid colour, faded; top bodies keep theirs.
+    window._set_layer_color("centroids_bottom", QColor("#ff8800"))
+    bottom = items("bodies", "centroids_bottom")
+    assert bottom and all(i.pen().color() == QColor(255, 136, 0, 110) for i in bottom)
+    assert all(i.pen().color() == theme.STYLE["bodies"].color for i in items("bodies"))
+    # Circuit-level fiducials stay grey whatever the fiducial colour.
+    window._set_layer_color("fiducials", QColor("#0000ff"))
+    assert all(m.color == QColor("#0000ff") for m in canvas.layers["fiducials"])
+
+    def painted_blue(selectable: bool) -> bool:
+        from PySide6.QtGui import QImage, QPainter
+
+        m = MarkerItem("fiducial", ("F",), QColor("#0000ff"), "")
+        m.selectable_fiducial = selectable
+        img = QImage(40, 40, QImage.Format_ARGB32)
+        img.fill(0)
+        p = QPainter(img)
+        p.translate(20, 20)
+        m.paint(p, None)
+        p.end()
+        px = [img.pixelColor(x, y) for x in range(40) for y in range(40)]
+        return any(c.alpha() and c.blue() > c.red() + 60 for c in px)
+
+    assert painted_blue(True) and not painted_blue(False)
+    window._set_layer_color("labels", QColor("#ff00ff"))
+    assert MarkerItem.label_color == QColor("#ff00ff")
+    # Nothing was rebuilt: same items, same selection.
+    assert len(canvas.scene().items()) == count and canvas.scene().selectedItems() == selected
+    # A rebuild (any edit) keeps the chosen colours.
+    canvas.set_analysis(window.analysis, keep_view=True)
+    assert all(i.color == copper for i in canvas.layers["copper_top"])
+
+
+def test_layers_panel_picks_and_resets_colours(window, monkeypatch):
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QColorDialog
+
+    from panelimport.gui import theme
+
+    panel = window.layers_panel
+    emitted = []
+    panel.colorChanged.connect(lambda key, color: emitted.append((key, color)))
+    assert not panel.color_button.isEnabled() and not panel.reset_button.isEnabled()
+    picked = QColor(10, 20, 30, 200)
+    asked = []
+
+    def get_color(initial, parent, title, options):
+        asked.append((QColor(initial), title, options))
+        return picked
+
+    monkeypatch.setattr(QColorDialog, "getColor", get_color)
+    panel.list.setCurrentRow([s.key for s in theme.LAYERS].index("paste_top"))
+    assert panel.current_key() == "paste_top" and panel.color_button.isEnabled()
+    panel.color_button.click()
+    assert asked == [(theme.STYLE["paste_top"].color, "Top paste colour", QColorDialog.ShowAlphaChannel)]
+    assert emitted == [("paste_top", picked)] and window.canvas.colors["paste_top"] == picked
+    assert panel.reset_button.isEnabled()
+    item = panel.list.currentItem()
+    assert item.icon().pixmap(14).toImage().pixelColor(7, 7) == QColor(10, 20, 30)  # swatch is opaque
+    # Cancelling the dialog changes nothing.
+    monkeypatch.setattr(QColorDialog, "getColor", lambda *a: QColor())
+    panel.list.itemActivated.emit(item)
+    assert len(emitted) == 1
+    panel.reset_button.click()
+    assert emitted[-1] == ("paste_top", theme.STYLE["paste_top"].color)
+    assert window.canvas.colors["paste_top"] == theme.STYLE["paste_top"].color
+    assert not panel.reset_button.isEnabled() and len(emitted) == 2  # only changed layers are reset
+
+
+def test_layer_colours_are_remembered(app, tmp_path, boxes):
+    from PySide6.QtGui import QColor
+
+    from panelimport.app import dispose
+    from panelimport.gui import theme
+    from panelimport.gui.main_window import MainWindow
+
+    ini = str(tmp_path / "gui.ini")
+    w = MainWindow(Settings(), QSettings(ini, QSettings.IniFormat))
+    w._set_layer_color("copper_top", QColor(1, 2, 3, 40))
+    w._set_layer_color("fiducials", QColor("#abcdef"))
+    w._set_layer_color("fiducials", theme.STYLE["fiducials"].color)  # back to the default
+    dispose(w)
+    stored = QSettings(ini, QSettings.IniFormat)
+    assert stored.value("layer_colors/copper_top") == "#28010203"
+    assert stored.value("layer_colors/fiducials") is None
+    stored.setValue("layer_colors/paste_top", "not a colour")
+    stored.sync()
+    w2 = MainWindow(Settings(), QSettings(ini, QSettings.IniFormat))
+    assert w2.canvas.colors["copper_top"] == QColor(1, 2, 3, 40)
+    assert w2.layers_panel.colors["copper_top"] == QColor(1, 2, 3, 40)
+    assert w2.canvas.colors["fiducials"] == theme.STYLE["fiducials"].color
+    assert w2.canvas.colors["paste_top"] == theme.STYLE["paste_top"].color
+    dispose(w2)
+
+
 def test_windows_show_the_pcb_icon(window):
     from pathlib import Path
 

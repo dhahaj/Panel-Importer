@@ -67,6 +67,9 @@ executables with Python removed from `PATH`, and uploads the folder as the
   bottom (display only). Layers toggle on the left. Hovering a centroid shows designator,
   part, package, layer, rotation (normalized and raw) and panel/circuit coordinates; the
   status bar shows the cursor's panel and circuit-relative coordinates.
+* **Layers** tab — tick a layer to show it. Double-click a layer (or select it and press
+  **Colour…**, or right-click it) to pick its colour, transparency included; **Reset
+  colours** restores the defaults. The ISS export preview uses the same colours.
 * **Circuits** tab — offsets, rotation, mirror, source and residual per circuit; choose
   the corner of circuit 1, the numbering order and the reference point.
 * **Components** tab — circuit 1's placements and the panel-level parts, sortable,
@@ -111,7 +114,7 @@ executables with Python removed from `PATH`, and uploads the folder as the
 
 Every edit (roles, numbering, reference, part-number mapping, fiducials, acknowledgements,
 panel-level confirmations, single-board setup, component edits, confirmation) is
-undoable. Window layout and layer visibility are remembered.
+undoable. Window layout, layer visibility and layer colours are remembered.
 
 ## Component edits
 

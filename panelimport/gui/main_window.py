@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QColor, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -28,6 +28,7 @@ from panelimport.analysis import edits
 from panelimport.analysis.fiducials import MAX_PANEL_FIDUCIALS
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.components_csv import COMPONENTS_SUFFIX, write_components_csv
+from panelimport.gui import theme
 from panelimport.gui.canvas import PanelCanvas
 from panelimport.gui.component_dialog import ComponentDialog, RemoveDialog
 from panelimport.gui.controller import Controller
@@ -69,6 +70,9 @@ class MainWindow(QMainWindow):
             stored = self.qsettings.value(f"layers/{key}")
             if stored is not None:
                 self.canvas.visible[key] = str(stored).lower() in ("true", "1")
+            color = QColor(str(self.qsettings.value(f"layer_colors/{key}", "")))
+            if color.isValid():
+                self.canvas.set_layer_color(key, color)
         self.summary = SummaryBar()
         central = QWidget()
         v = QVBoxLayout(central)
@@ -78,7 +82,7 @@ class MainWindow(QMainWindow):
         v.addWidget(self.canvas, 1)
         self.setCentralWidget(central)
 
-        self.layers_panel = LayersPanel(self.canvas.visible)
+        self.layers_panel = LayersPanel(self.canvas.visible, self.canvas.colors)
         self.circuits_panel = CircuitsPanel()
         self.components_panel = ComponentsPanel()
         self.fiducials_panel = FiducialsPanel()
@@ -207,6 +211,7 @@ class MainWindow(QMainWindow):
         )
         self.canvas.zoomChanged.connect(lambda z: self.zoom_label.setText(f"{z:.1f} px/mm"))
         self.layers_panel.layerToggled.connect(self._toggle_layer)
+        self.layers_panel.colorChanged.connect(self._set_layer_color)
         self.circuits_panel.numberingChanged.connect(
             lambda first, order: c.apply("Change circuit numbering", numbering_first=first, numbering_order=order)
         )
@@ -322,6 +327,13 @@ class MainWindow(QMainWindow):
     def _toggle_layer(self, key: str, on: bool) -> None:
         self.canvas.set_layer_visible(key, on)
         self.qsettings.setValue(f"layers/{key}", on)
+
+    def _set_layer_color(self, key: str, color: QColor) -> None:
+        self.canvas.set_layer_color(key, color)
+        if color == theme.STYLE[key].color:  # a default colour follows future defaults
+            self.qsettings.remove(f"layer_colors/{key}")
+        else:
+            self.qsettings.setValue(f"layer_colors/{key}", color.name(QColor.HexArgb))
 
     def _toggle_measure(self, on: bool) -> None:
         self.canvas.set_measure_mode(on)
@@ -748,6 +760,7 @@ class MainWindow(QMainWindow):
             default_iss_path(project_path),
             pwb_id=project_stem(project_path),
             qsettings=self.qsettings,
+            colors=self.canvas.colors,
             parent=self,
         )
         if dlg.exec() and dlg.written is not None:
