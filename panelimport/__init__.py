@@ -9,4 +9,4 @@ Layering rule: ``panelimport.io``, ``panelimport.analysis``, ``panelimport.model
 ``panelimport.iss`` never import Qt.  Only ``panelimport.gui`` and ``panelimport.app`` do.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
