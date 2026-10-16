@@ -167,6 +167,26 @@ def test_isolation_required_for_copper_fiducial(tmp_path):
     assert "no_fiducials" in codes(a)
 
 
+def test_drilled_pads_are_not_copper_fiducials(tmp_path):
+    """Through-hole pins routed on other layers look isolated; their holes rule them out."""
+    job = sr_panel(n_parts=5, with_fiducials=False)
+    job.layers.append(("drill", "DRILL", "BOARD"))
+    board, pan = job.steps["pcb"], job.steps["panel"]
+    board.fiducial_feature(45, 5, attr=False)  # an undrilled local fiducial
+    for i in range(3):  # a header: 1.4 mm pads at 2.54 mm clear the 1 mm ring
+        x = 5 + i * 2.54
+        for layer, d in (("top_copper", 1.4), ("top_mask", 1.5), ("bottom_copper", 1.4), ("bottom_mask", 1.5)):
+            board.pad(layer, x, 5, "round", d)
+        board.pad("drill", x, 5, "round", 0.9)
+    pan.fiducial_feature(160, 3, attr=False)
+    pan.fiducial_feature(80, 3, attr=False)
+    pan.line("drill", 79.8, 3, 80.2, 3, 0.5)  # a slot through the ring
+    a = run(job, tmp_path)
+    assert {f.name for f in a.fiducial_candidates if f.selectable} == {"F(160.000,3.000)"}
+    local = [f for f in a.fiducial_candidates if f.level == "circuit"]
+    assert len(local) == 6 and all(f.diameter == pytest.approx(1.0) for f in local)
+
+
 def test_circuit_fiducials_are_not_selectable(tmp_path):
     job = sr_panel()
     job.steps["pcb"].component("FID9", "FID1MM", 48, 34, part="FIDUCIAL")

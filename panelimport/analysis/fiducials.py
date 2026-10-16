@@ -6,8 +6,8 @@ Sources, strongest first:
   fiducial pattern (``FID*`` by default, configurable);
 * ``attribute`` — a copper pad carrying ``.pad_usage`` = ``g_fiducial``/``l_fiducial``
   or a ``.fiducial_name`` attribute;
-* ``copper`` — an isolated round copper pad with a larger solder-mask opening and no
-  paste.
+* ``copper`` — an isolated round copper pad with a larger solder-mask opening, no
+  paste and no drill hole (a through-hole pin routed on other layers looks isolated).
 
 Candidates inside a circuit are circuit-level fiducials (shown, not selectable); the
 rest are panel fiducials, of which the user confirms up to three.
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
 
-from panelimport.analysis.layers import copper_geometry, pad_set
+from panelimport.analysis.layers import CopperGeometry, copper_geometry, pad_set
 from panelimport.analysis.transforms import Transform
 from panelimport.io.odb.attributes import resolve_attributes
 from panelimport.io.odb.job import OdbJob
@@ -69,9 +69,21 @@ def matches_pattern(value: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatchcase(v, p.upper()) for p in patterns if p)
 
 
+def drill_geometry(job: OdbJob, step: str) -> list[CopperGeometry]:
+    """The holes and slots of every board drill layer of one step."""
+    out = []
+    for layer in job.matrix.layers:
+        if layer.is_board and layer.type == "DRILL":
+            ff = job.features(step, layer.name)
+            if ff is not None:
+                out.append(copper_geometry(ff))
+    return out
+
+
 def feature_candidates(job: OdbJob, step: str, roles: dict[str, str], fs: FiducialSettings) -> list[LocalCandidate]:
     """Attribute-marked and isolated round copper pads of one step (step frame)."""
     out: list[LocalCandidate] = []
+    holes = drill_geometry(job, step)
     for side in ("top", "bottom"):
         copper_name = roles.get(f"copper_{side}")
         if not copper_name:
@@ -105,6 +117,8 @@ def feature_candidates(job: OdbJob, step: str, roles: dict[str, str], fs: Fiduci
                 continue
             r = d / 2
             if paste.index.overlapping(x - r, y - r, x + r, y + r):
+                continue
+            if not all(h.clear_of(x, y, r) for h in holes):
                 continue
             if not cg.clear_of(x, y, r + fs.clearance, ignore_pad=i):
                 continue
