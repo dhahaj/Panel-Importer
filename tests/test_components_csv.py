@@ -45,9 +45,11 @@ def test_every_component_once_in_designator_order(tmp_path):
     assert names == board + ["FID1", "FID2", "FID3"]
     assert board == sorted(board, key=E.natural_key) and board.index("C2") < board.index("C10")
     by_name = {r["Designator"]: r for r in rows}
-    assert list(by_name["C1"].values()) == ["C1", "board", "CAP-100N", "D-1001", "C0603", "top", "25", "10", "270", "OK 0.000 mm", ""]
+    assert list(by_name["C1"].values()) == [
+        "C1", "board", "CAP-100N", "D-1001", "C0603", "top", "25", "10", "270", "1.6", "0.8", "", "OK 0.000 mm", ""
+    ]  # fmt: skip  (no .comp_height: the height is unknown, left empty)
     assert by_name["C2"]["Side"] == "bottom" and by_name["J1"]["Paste check"] == "no paste"
-    assert list(by_name["FID2"].values()) == ["FID2", "panel", "FIDUCIAL", "", "FID1MM", "top", "161.5", "2.5", "0", "", ""]
+    assert list(by_name["FID2"].values()) == ["FID2", "panel", "FIDUCIAL", "", "FID1MM", "top", "161.5", "2.5", "0", "2", "2", "", "", ""]
 
 
 def test_numbers_are_the_project_files(tmp_path):

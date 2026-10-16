@@ -70,7 +70,10 @@ def _rows_by_pilot_row(cmp) -> dict[float, list]:
 
 def test_generated_program(generated):
     prepared, prog = generated
-    assert [(i.code, i.severity.value) for i in prepared.issues] == [("bottom_angles_unverified", "warning")]
+    assert [(i.code, i.severity.value) for i in prepared.issues] == [
+        ("bottom_angles_unverified", "warning"),
+        ("component_size_unknown", "warning"),  # the export has no .comp_height for 17 of them
+    ]
     m = prepared.layout.machine
     assert (m.side, m.flip, m.rotation) == ("bottom", "left-right", 90)
     assert (prog.width, prog.height) == (256.0096, 182.626)
@@ -81,6 +84,12 @@ def test_generated_program(generated):
     assert (prog.circuit_width, prog.circuit_height) == (50.8, 52.07)
     r35 = next(p for p in prog.placements if p.designator == "R35")
     assert (r35.x, r35.y, r35.component) == (41.783, 21.209, "107522-31-1001")
+    # Sizes: the package body outline (pins left out) and .comp_height, in mm.
+    sizes = {c.name: (c.width, c.length, c.height) for c in prog.components}
+    assert sizes["107522-31-1001"] == (1.7, 0.9, 0.5512)  # RESC1608X55: 0.0217 in high
+    assert sizes["107523-1156-2204"] == (3.4, 1.8, 1.8009)  # CAPC3216X180
+    assert sizes["107053-3"] == (1.3, 2.92, 1.11)  # SOT-23: pins along X, body long in Y
+    assert sizes["107522-31-2002"] == (1.7, 0.9, 0.0)  # .comp_height=0: unknown
 
 
 def test_golden_against_circuitcam(generated):

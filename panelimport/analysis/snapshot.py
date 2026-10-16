@@ -79,6 +79,9 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
             attributes=dict(p.attributes),
             part_number=p.part_number,
             written=p.designator,
+            width=p.width,
+            length=p.length,
+            height=p.height,
         )
         for p in project.placements
     ]
@@ -95,6 +98,9 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
             norm_angle(p.rotation_raw),
             "",
             part_number=p.part_number,
+            width=p.width,
+            length=p.length,
+            height=p.height,
         )
         for p in project.panel_parts
     ]

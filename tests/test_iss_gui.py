@@ -99,6 +99,10 @@ def test_export_dialog_settings_and_errors(app, tmp_path, boxes):
     assert "Panel:      70 × 100 mm" in dlg.summary.text()
     dlg.clamp.setValue(0)
     assert dlg.settings().clamp_offset_y == "auto"
+    assert dlg.settings().component_size == "body" and "every size known" in dlg.summary.text()
+    dlg.sizes.setCurrentIndex(dlg.sizes.findData("zero"))
+    assert dlg.prepared.settings.component_size == "zero" and "sizes written as 0" in dlg.summary.text()
+    dlg.sizes.setCurrentIndex(dlg.sizes.findData("body"))
     dlg.grab()  # the preview paints
     dlg._write()
     assert (tmp_path / "out.iss").exists() and read_program(tmp_path / "out.iss").pwb_id == "ER-F8"

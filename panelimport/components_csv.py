@@ -13,6 +13,7 @@ import os
 
 from panelimport.analysis.edits import all_parts, natural_key, shown_values, status_text
 from panelimport.analysis.result import PanelAnalysis, r6
+from panelimport.model.panel import SIZE_FIELDS
 
 COMPONENTS_SUFFIX = ".components.csv"
 
@@ -27,6 +28,9 @@ COLUMNS = (
     "X (mm)",
     "Y (mm)",
     "Rotation (°)",
+    "Width (mm)",
+    "Length (mm)",
+    "Height (mm)",
     "Paste check",
     "Status",
 )
@@ -53,6 +57,7 @@ def component_rows(a: PanelAnalysis) -> list[list[str]]:
                 _number(values["x"]),
                 _number(values["y"]),
                 _number(values["rotation"]),
+                *(_number(values[f]) if values[f] else "" for f in SIZE_FIELDS),  # empty: unknown
                 (part.paste.describe() if part.paste else "-") if level == "board" else "",
                 status_text(part),
             ]

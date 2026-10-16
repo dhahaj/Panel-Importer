@@ -47,6 +47,7 @@ from panelimport.iss.writer import ISS_SUFFIX, IssWriteError, write_iss
 from panelimport.model.panel import PanelProject
 
 ROTATIONS = ["auto", "0", "90", "180", "270"]
+COMPONENT_SIZE_LABELS = {"body": "From the project (body and height)", "zero": "Zero for every component"}
 PROGRAM_FILTER = "Placement programs (*.iss *.x21);;ISS programs (*.iss);;JaNets programs (*.x21);;All files (*)"
 
 
@@ -164,11 +165,17 @@ class ExportIssDialog(QDialog):
         self.direction.addItems(["ccw", "cw"])
         self.direction.setCurrentText(settings.angle_direction)
         self.offset = _spin(settings.angle_offset, -360.0, 360.0, " °", 3)
+        self.sizes = QComboBox()
+        for key, label in COMPONENT_SIZE_LABELS.items():
+            self.sizes.addItem(label, key)
+        self.sizes.setCurrentIndex(max(self.sizes.findData(settings.component_size), 0))
+        self.sizes.setToolTip("componentSize of each component: its body size and height from the project, or 0")
         form.addRow("pwbId", self.pwb_id)
         form.addRow("Panel rotation (CCW)", self.rotation)
         form.addRow("Clamp offset Y", self.clamp)
         form.addRow("Angle direction", self.direction)
         form.addRow("Angle offset", self.offset)
+        form.addRow("Component sizes", self.sizes)
 
         side_box = QGroupBox("Side")
         side_form = QFormLayout(side_box)
@@ -232,7 +239,7 @@ class ExportIssDialog(QDialog):
         layout.addWidget(self.buttons)
         self.resize(1000, 760)
 
-        for w in (self.rotation, self.direction, self.flip):
+        for w in (self.rotation, self.direction, self.flip, self.sizes):
             w.currentTextChanged.connect(self._refresh)
         for w in (self.clamp, self.offset, self.bottom_offset):
             w.valueChanged.connect(self._refresh)
@@ -250,6 +257,7 @@ class ExportIssDialog(QDialog):
         s.angle_offset = self.offset.value()
         s.bottom_flip = self.flip.currentText()
         s.bottom_angle_offset = self.bottom_offset.value()
+        s.component_size = self.sizes.currentData()
         return s
 
     def _refresh(self, *_args) -> None:

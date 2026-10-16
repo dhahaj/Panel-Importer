@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtGui import QBrush
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
@@ -12,14 +14,30 @@ from panelimport.gui import theme
 EXPORT_LABEL = "    export"  # the row under an edited value, showing the export's
 
 
-def _field(part, a: PanelAnalysis, label: str, field: str, fmt: str = "{}") -> list[tuple]:
+def _field(part, a: PanelAnalysis, label: str, field: str, fmt: str | Callable[[float], str] = "{}") -> list[tuple]:
     """A value's row, followed by the export's value when an edit changed it."""
-    value = shown_values(a, part)[field]
-    rows: list[tuple] = [(label, fmt.format(value) if value != "" else "-")]
+
+    def text(v, empty: str) -> str:
+        if callable(fmt):
+            return fmt(v)
+        return fmt.format(v) if v != "" else empty
+
+    rows: list[tuple] = [(label, text(shown_values(a, part)[field], "-"))]
     if field in part.export:
-        old = shown_values(a, part, export=True)[field]
-        rows.append((EXPORT_LABEL, fmt.format(old) if old != "" else "(empty)"))
+        rows.append((EXPORT_LABEL, text(shown_values(a, part, export=True)[field], "(empty)")))
     return rows
+
+
+def _size(v: float) -> str:
+    return f"{v:.4f}" if v else "unknown"
+
+
+def _size_rows(part, a: PanelAnalysis) -> list[tuple]:
+    return [
+        *_field(part, a, "Width (X, mm)", "width", _size),
+        *_field(part, a, "Length (Y, mm)", "length", _size),
+        *_field(part, a, "Height (mm)", "height", _size),
+    ]
 
 
 def _status_rows(part) -> list[tuple]:
@@ -85,6 +103,7 @@ class Inspector(QWidget):
             *_field(p, a, "Circuit Y (mm)", "y", "{:.4f}"),
             *_field(p, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
             ("Rotation raw (ODB++, CW)", f"{p.rotation_raw:.3f}°"),
+            *_size_rows(p, a),
             ("Paste check", p.paste.describe() if p.paste else "-"),
         ]
         if p.written and p.written != p.designator:
@@ -115,6 +134,7 @@ class Inspector(QWidget):
             *_field(pp, a, "Panel Y (mm)", "y", "{:.4f}"),
             *_field(pp, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
             ("Rotation raw (CW)", f"{pp.rotation_raw:.3f}°"),
+            *_size_rows(pp, a),
             ("Step", pp.step or "-"),
         ]
         for k, v in sorted(pp.attributes.items()):

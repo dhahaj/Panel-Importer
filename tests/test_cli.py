@@ -46,7 +46,7 @@ def test_analyze_components_csv(tmp_path, capsys):
     assert f"Components: 15 written to {out}" in capsys.readouterr().out
     lines = out.read_text(encoding="utf-8-sig").splitlines()
     assert lines[0].startswith("Designator,Level,Part name,") and len(lines) == 16
-    assert "C1,board,CAP-100N,,C0603,top,25,10,270,OK 0.000 mm," in lines
+    assert "C1,board,CAP-100N,,C0603,top,25,10,270,1.6,0.8,,OK 0.000 mm," in lines
     # With --json the output stays JSON; a file that cannot be written is an error.
     assert main(["analyze", str(src), "--json", "--components-csv", str(out)]) == 0
     assert json.loads(capsys.readouterr().out)["placements"] == 12

@@ -187,7 +187,8 @@ def test_export_components_csv(window, tmp_path, app, boxes, monkeypatch):
     for row in rows[1:]:
         shown = table[row[0]]
         for col, (cell, text) in enumerate(zip(row, shown)):
-            assert (f"{float(cell):.3f}" if col in NUMERIC else cell) == text
+            # An unknown size is empty in the file and "-" in the table.
+            assert ((f"{float(cell):.3f}" if cell else "-") if col in NUMERIC else cell) == text
 
 
 def test_export_components_from_a_project_without_its_source(window, tmp_path, app, monkeypatch):

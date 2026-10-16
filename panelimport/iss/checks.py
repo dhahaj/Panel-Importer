@@ -17,7 +17,7 @@ from shapely.prepared import prep
 from panelimport.iss.mapping import IssLayout, build_layout, circuit_transforms, panel_outline, placement_sides
 from panelimport.iss.settings import IssSettings
 from panelimport.model.issues import Issue, error, sort_issues, warning
-from panelimport.model.panel import PanelProject
+from panelimport.model.panel import SIZE_FIELDS, SIZES_VERSION, PanelProject
 
 #: Characters JaNets is known to accept in a component name.
 _NAME_OK = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -166,14 +166,6 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
                 subject="layout",
             )
         )
-    if settings.component_size == "body":
-        issues.append(
-            error(
-                "component_size_body",
-                "component_size=body needs package body sizes, which the project file does not carry; use zero",
-                subject="component_size",
-            )
-        )
 
     # ------------------------------------------------------------ component names
     for p in project.placements:
@@ -203,6 +195,10 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
         if n > 1:
             issues.append(error("duplicate_designator", f"Designator {d} appears {n} times in circuit 1", designator=d))
 
+    # ------------------------------------------------------------ component sizes
+    if settings.component_size == "body":
+        issues += _size_checks(project, layout)
+
     # ------------------------------------------------------------ panel-level parts
     if layout.skipped_panel_parts:
         names = ", ".join(layout.skipped_panel_parts)
@@ -216,6 +212,53 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
         )
 
     issues += _outline_checks(project)
+    return issues
+
+
+def size_text(size: tuple[float, float, float]) -> str:
+    return " × ".join(f"{v:g}" for v in size)
+
+
+def _size_checks(project: PanelProject, layout: IssLayout) -> list[Issue]:
+    if project.version < SIZES_VERSION:
+        return [
+            warning(
+                "component_size_old_project",
+                f"The project file is version {project.version}, from before component sizes: every componentSize "
+                "is written as 0. Reopen and save the project in Phase 1 to take the sizes from the export",
+                subject="component_size",
+            )
+        ]
+    issues: list[Issue] = []
+    written = {c.name: c for c in layout.program.components}
+    for conflict in layout.size_conflicts:
+        shown = "; ".join(f"{d} {size_text(s)}" for d, s in conflict.sizes[:4]) + ("; …" if len(conflict.sizes) > 4 else "")
+        c = written[conflict.component]
+        issues.append(
+            warning(
+                "component_size_differs",
+                f"Component {conflict.component}: its placements give different {', '.join(conflict.fields)} "
+                f"({shown}); written {size_text((c.width, c.length, c.height))}. Edit them in Phase 1 to choose",
+                designator=conflict.sizes[0][0],
+                subject=conflict.component,
+            )
+        )
+    unknown = {}
+    for c in layout.program.components:
+        missing = [f for f in SIZE_FIELDS if not getattr(c, f) > 0]
+        if missing:
+            unknown[c.name] = missing
+    if unknown:
+        listed = [f"{name} ({', '.join(missing)})" for name, missing in unknown.items()]
+        issues.append(
+            warning(
+                "component_size_unknown",
+                f"{len(unknown)} component(s) have an unknown size, written as 0: {', '.join(listed[:8])}"
+                f"{', …' if len(listed) > 8 else ''}. Edit the components in Phase 1 to enter them",
+                subject="component_size",
+                data={"components": unknown},
+            )
+        )
     return issues
 
 

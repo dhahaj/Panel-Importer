@@ -16,7 +16,7 @@ def test_defaults_are_the_brief():
     assert s.validate() == []
     assert (s.panel_rotation, s.bottom_flip, s.clamp_offset_y, s.circuit_layout) == ("auto", "left-right", "auto", "nonmatrix")
     assert (s.pwb_thickness, s.back_height, s.angle_direction, s.angle_offset) == (1.6, 37.0, "ccw", 0.0)
-    assert (s.header_completion, s.model_component_stubs, s.component_size) == ("zero", False, "zero")
+    assert (s.header_completion, s.model_component_stubs, s.component_size) == ("zero", False, "body")
     assert s.comment_attributes == ["DSC", "Description", "Comment"]
     assert (s.line_name, s.line_id, s.mark_name, s.traceability) == ("Line", 1, "BOCMARK01", "TwoDimensions")
 

@@ -29,7 +29,7 @@ from panelimport.analysis.result import (
 from panelimport.analysis.transforms import Transform, angle_diff, norm_angle
 from panelimport.io.odb.eda import Package
 from panelimport.model.issues import Issue, error, warning
-from panelimport.model.panel import EDIT_FIELDS, ComponentEdit
+from panelimport.model.panel import EDIT_FIELDS, SIZE_FIELDS, ComponentEdit
 
 Key = tuple[str, str]  # (level, designator)
 Part = PlacementInfo | PanelPartInfo
@@ -45,6 +45,9 @@ FIELD_LABELS = {
     "x": "X",
     "y": "Y",
     "rotation": "rotation",
+    "width": "width",
+    "length": "length",
+    "height": "height",
 }
 REASON_LABELS = {
     "through-hole": "through-hole",
@@ -244,6 +247,11 @@ def _override(p: Part, e: ComponentEdit, origin: tuple[float, float]) -> None:
         export["layer"] = p.layer
     if any(k in export for k in POSE_FIELDS):
         _repose(p, x, y, rotation, layer)
+    for f in SIZE_FIELDS:
+        value = getattr(e, f)
+        if value is not None and abs(value - getattr(p, f)) > EPS:
+            export[f] = getattr(p, f)
+            setattr(p, f, value)
     p.export = export
     p.edit = e
     p.state = "removed" if e.removed else ("edited" if export else "")
@@ -262,6 +270,10 @@ def _added(e: ComponentEdit, origin: tuple[float, float], package_of: PackageLoo
     x, y = e.x + origin[0], e.y + origin[1]
     rotation = norm_angle(e.rotation or 0.0)
     layer = e.layer or "top"
+    # A package of the same name in the export gives the added part its body size, and
+    # (board level) pins and a body, so it is drawn and paste-checked like the others.
+    pkg = package_of(e.level, e.package) if e.package else None
+    size = _added_size(e, pkg)
     if e.level == "panel":
         return PanelPartInfo(
             designator=e.designator,
@@ -276,6 +288,7 @@ def _added(e: ComponentEdit, origin: tuple[float, float], package_of: PackageLoo
             part_number=e.part_number or "",
             state="added",
             edit=e,
+            **size,
         )
     p = PlacementInfo(
         designator=e.designator,
@@ -292,15 +305,20 @@ def _added(e: ComponentEdit, origin: tuple[float, float], package_of: PackageLoo
         written=e.designator,
         state="added",
         edit=e,
+        **size,
     )
-    # A package of the same name in the export gives the added part pins and a body, so
-    # it is drawn and paste-checked like the others.
-    pkg = package_of(e.level, p.package) if p.package else None
     if pkg is not None:
         tf = pose(x, y, rotation, layer == "bottom")
         p.toeprints = [tf.apply(pin.x, pin.y) for pin in pkg.pins]
         p.body = [[tf.apply(px, py) for px, py in poly] for shape in pkg.outlines for poly in shape.polygons()]
     return p
+
+
+def _added_size(e: ComponentEdit, pkg: Package | None) -> dict[str, float]:
+    """An added part's size: what the edit gives, else (width, length) the package body's."""
+    body = (pkg.body_size if pkg is not None else None) or (0.0, 0.0)
+    known = {"width": body[0], "length": body[1], "height": 0.0}
+    return {f: getattr(e, f) or known[f] for f in SIZE_FIELDS}
 
 
 def _outline_checks(a: PanelAnalysis, issues: list[Issue]) -> None:
@@ -359,15 +377,25 @@ def natural_key(text: str) -> tuple:
     return tuple(out)
 
 
+def changed_labels(fields: Iterable[str]) -> list[str]:
+    """What changed, in words: X and Y are the "position", the size fields the "size"."""
+    out: list[str] = []
+    for f in fields:
+        label = "position" if f in ("x", "y") else ("size" if f in SIZE_FIELDS else FIELD_LABELS[f])
+        if label not in out:
+            out.append(label)
+    return out
+
+
 def describe_edit(e: ComponentEdit) -> str:
     if e.added:
         return "added"
     parts = []
     if e.removed:
         parts.append("removed" + (f": {REASON_LABELS.get(e.reason, e.reason)}" if e.reason else ""))
-    changed = [FIELD_LABELS[f] for f in EDIT_FIELDS if getattr(e, f) is not None and f != "y"]
+    changed = changed_labels(f for f in EDIT_FIELDS if getattr(e, f) is not None)
     if changed:
-        parts.append("changes " + ", ".join("position" if c == "X" else c for c in changed))
+        parts.append("changes " + ", ".join(changed))
     return "; ".join(parts) or "no change"
 
 
@@ -381,8 +409,7 @@ def status_text(part: Part) -> str:
         reason = REASON_LABELS.get(e.reason, e.reason) if e is not None and e.reason else ""
         return "removed" + (f": {reason}" if reason else "") + note
     if part.state == "edited":
-        fields = [FIELD_LABELS[f] for f in EDIT_FIELDS if f in part.export and f != "y"]
-        return "edited: " + ", ".join("position" if f == "X" else f for f in fields) + note
+        return "edited: " + ", ".join(changed_labels(f for f in EDIT_FIELDS if f in part.export)) + note
     return ""
 
 
@@ -463,6 +490,10 @@ def edit_from_values(
     rot = values.get("rotation")
     if rot is not None and angle_diff(rot, export["rotation"]) > EPS:
         changes["rotation"] = angle6(rot)
+    for f in SIZE_FIELDS:
+        v = values.get(f)
+        if v is not None and abs(v - export[f]) > EPS:
+            changes[f] = r6(v)
     removed = old is not None and old.removed
     note = (old.note if old is not None else "") if note is None else note
     if not changes and not removed:
@@ -490,6 +521,8 @@ def added_edit(level: str, designator: str, values: dict[str, object], note: str
         x=r6(values.get("x") or 0.0),
         y=r6(values.get("y") or 0.0),
         rotation=angle6(values.get("rotation") or 0.0),
+        # 0 (unknown) is left unset: the package body, if the export has it, gives the size.
+        **{f: r6(values[f]) for f in SIZE_FIELDS if values.get(f)},
     )
 
 

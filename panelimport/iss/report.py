@@ -28,12 +28,24 @@ def summary_lines(prepared: Prepared) -> list[str]:
         f"Circuits:   {len(prog.circuits)} ({prog.circuit_layout}), outline {fmt(prog.circuit_width)} × {fmt(prog.circuit_height)}, "
         f"circuitLayoutOffset ({fmt(prog.circuit_layout_offset[0])}, {fmt(prog.circuit_layout_offset[1])})",
         f"Placements: {len(prog.placements)} per circuit, {len(prog.placements) * len(prog.circuits)} on the panel",
-        f"Components: {len(prog.components)}",
+        f"Components: {len(prog.components)}; {_sizes_text(prepared)}",
         f"Fiducials:  {len(prog.fiducials)} on the {m.side} layer"
         + (f" ({', '.join(f.name for f in prog.fiducials)})" if prog.fiducials else "")
         + (f"; left out on the other layer: {', '.join(layout.other_layer_fiducials)}" if layout.other_layer_fiducials else ""),
     ]
     return lines
+
+
+def _sizes_text(prepared: Prepared) -> str:
+    if prepared.settings.component_size != "body":
+        return "sizes written as 0 (component_size=zero)"
+    comps = prepared.layout.program.components
+    complete = sum(1 for c in comps if c.width > 0 and c.length > 0 and c.height > 0)
+    if not comps:
+        return "no sizes"
+    if complete == len(comps):
+        return "every size known"
+    return f"sizes: {complete} complete, {len(comps) - complete} with unknowns"  # one line in the GUI's summary
 
 
 def format_report(
@@ -56,6 +68,10 @@ def format_report(
         lines.append("  designator   component              X          Y      angle")
         for p in prog.placements:
             lines.append(f"  {p.designator:<12} {p.component[:20]:<20} {p.x:10.4f} {p.y:10.4f} {p.angle:8.3f}")
+        lines.append("")
+        lines.append("  component              width    length    height   comment")
+        for c in prog.components:
+            lines.append(f"  {c.name[:20]:<20} {c.width:8.4f} {c.length:9.4f} {c.height:9.4f}   {c.comment}")
     errors, warnings = prepared.errors, prepared.warnings
     lines.append("")
     lines.append(f"Issues: {len(errors)} errors, {len(warnings)} warnings")

@@ -62,7 +62,7 @@ def test_project_json_layout(tmp_path):
     s, _src = _confirmed_session(tmp_path)
     s.save(tmp_path / "x.panel.json")
     data = json.loads((tmp_path / "x.panel.json").read_text())
-    assert data["format"] == "panel-project" and data["version"] == 2
+    assert data["format"] == "panel-project" and data["version"] == 3
     assert list(data)[:3] == ["format", "version", "generator"]
     for key in (
         "source",
@@ -145,7 +145,7 @@ def test_strict_loading(tmp_path):
     with pytest.raises(ProjectFileError, match="unknown keys"):
         project_from_dict({**good, "surprise": 1})
     with pytest.raises(ProjectFileError, match="version"):
-        project_from_dict({**good, "version": 3})
+        project_from_dict({**good, "version": 4})
     with pytest.raises(ProjectFileError, match="version"):
         project_from_dict({**good, "version": True})
     with pytest.raises(ProjectFileError, match="format"):

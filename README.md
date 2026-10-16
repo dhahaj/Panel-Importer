@@ -90,7 +90,7 @@ git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
   filterable and searchable; pick the attribute that holds the part number. Selecting a
   row selects the part on the canvas and vice versa. Components can be edited here (see
   [Component edits](#component-edits)): **Add…** (`Insert`), **Edit…** (`F2` or
-  double-click; several rows at once change part name, part number or package),
+  double-click; several rows at once change part name, part number, package or size),
   **Remove…** (`Delete`), **Restore**, **Revert** and **Find ▾**, which lists
   through-hole, not-populated, fiducial/mechanical and not-in-BOM parts for review.
   Edited values are amber (the export's value is in the tooltip), added parts green,
@@ -147,15 +147,22 @@ reproduces them, and `panelimport verify` lists them).
   `Not Fitted`), fiducial or pinless mechanical parts, and parts missing from a loaded
   BOM. On a flattened panel a removed designator also leaves the copy count and the
   circuit fit.
-* **Edit** — override part name, part number, package, side, position or rotation. A
-  part-number edit wins over the part-number attribute. A position or rotation edit
-  corrects where the part is placed; its pads and body stay where the PCB has them, so
-  the paste check now compares the corrected centroid with the part's own pads (and
+* **Edit** — override part name, part number, package, side, position, rotation or
+  size. A part-number edit wins over the part-number attribute. A position or rotation
+  edit corrects where the part is placed; its pads and body stay where the PCB has them,
+  so the paste check now compares the corrected centroid with the part's own pads (and
   warns with `centroid_off_pads` when it is off them).
 * **Add** — a component the export does not have, board-level (placed in every circuit)
   or panel-level (placed once). When its package name matches a package in the export,
-  it gets that package's pins and body, is drawn and is paste-checked
+  it gets that package's pins, body and body size, is drawn and is paste-checked
   (`added_no_paste` warns when no paste is under it).
+
+**Component size** is the body's width (along the part's own X axis at rotation 0),
+length (its Y axis) and height, in mm; 0 means unknown. The export gives width and
+length from the package's body outline in `eda/data` (pads left out) and the height
+from the `.comp_height` attribute (in the file's units). The Components tab, the
+inspector and the edit dialog show and change them; with several rows selected a size
+that is set applies to each, and one left at *(keep each one's)* stays as it is.
 
 Board-level X/Y are circuit-relative and panel-level X/Y are panel coordinates, exactly
 as the components table shows them and as `placements`/`panel_parts` store them.
@@ -170,14 +177,15 @@ saving.
 **File → Export components CSV…** and `panelimport analyze --components-csv FILE` write
 one row per component, with the columns of the Components tab: `Designator`, `Level`,
 `Part name`, `Part number`, `Package`, `Side`, `X (mm)`, `Y (mm)`, `Rotation (°)`,
-`Paste check`, `Status`.
+`Width (mm)`, `Length (mm)`, `Height (mm)`, `Paste check`, `Status`.
 
 * Every component is written whatever the tab's search and filters show: circuit 1's
   placements (`board`) first, then the panel-level parts (`panel`), each in designator
   order.
 * The values are the ones the tab shows, component edits applied: board-level X/Y are
   circuit-relative, panel-level X/Y are panel coordinates, rotation is counter-clockwise.
-  Numbers have the project file's precision instead of the three decimals shown.
+  Numbers have the project file's precision instead of the three decimals shown; an
+  unknown size is empty.
 * Removed components are listed too, with `removed: …` in `Status` (`added` and
   `edited: …` mark the other changed ones); filter on it for the parts that are placed.
 * The file is comma-separated UTF-8 with a byte-order mark, which Excel opens directly.
@@ -321,7 +329,12 @@ dedicated writer produces it, and every file is checked before it replaces anyth
   P moves to that circuit (positions on the panel do not change).
 * One component record per distinct component name, in first-use order: the part number,
   or the part name with a warning. `comment` = the first of `comment_attributes` present
-  (`DSC`, `Description`, `Comment`), else the part name. Sizes are 0 (JaNets fills them).
+  (`DSC`, `Description`, `Comment`), else the part name.
+* `componentSize` (`witdh`, `length`, `height`) is the component's size from the project
+  (`component_size = body`): one per component, so its placements are combined per
+  dimension — a size edited in Phase 1 wins for the whole component, otherwise the
+  export's, 0 where none is known. An angle offset of ±90° swaps width and length, so
+  they stay in the frame the machine turns the part in.
   `model/componentData` is left out (`model_component_stubs` adds stubs, test only).
 * Fiducial mark names are the project's names when they are plain identifiers
   (`FID1`), else `F1`, `F2`, `F3` (copper fiducials are named like `F(6.351,12.703)`).
@@ -344,7 +357,7 @@ for one run, and the report lists every value used.
 | `angle_direction`, `angle_offset` | `ccw`, 0 | `cw` negates every angle; the offset is added to placement angles |
 | `header_completion` | `zero` | `zero` (CircuitCAM, issgen) or `total` (T3, JaNets) |
 | `model_component_stubs` | false | test switch: stub `model/componentData` |
-| `component_size` | `zero` | `body` is refused for now: the project file carries no package bodies |
+| `component_size` | `body` | `body`: each component's body size and height from the project; `zero`: 0 for every component |
 | `comment_attributes` | `DSC, Description, Comment` | first one present wins |
 | `line_name`, `line_id`, `mark_name`, `traceability` | `Line`, 1, `BOCMARK01`, `TwoDimensions` | `traceability` may be `NOUSE` |
 
@@ -354,7 +367,7 @@ Errors stop the write; warnings go in the report and the dialog.
 
 | Code | Check | Severity |
 | --- | --- | --- |
-| `project_invalid` | not a readable v1/v2 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
+| `project_invalid` | not a readable v1–v3 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
 | `no_fiducials`, `too_many_fiducials` | fewer than 2 / more than 3 fiducials on the placements' layer | Error |
 | `mirrored_circuit` | any circuit, or circuit 1 itself, mirrored | Error |
 | `rotated_circuit` | an allocation angle ≠ 0 (never tested in JaNets) | Warning |
@@ -367,7 +380,10 @@ Errors stop the write; warnings go in the report and the dialog.
 | `outside_circuit` / `outside_panel` | a placement outside the circuit outline / any placement or fiducial outside the panel | Warning / Error |
 | `no_placements` | nothing to place | Error |
 | `source_changed` | the project's source export changed (written from the project anyway) | Warning |
-| `matrix_layout`, `component_size_body` | a setting the project cannot satisfy | Error |
+| `component_size_unknown` | components written with a size of 0 in some dimension, listed | Warning |
+| `component_size_differs` | placements of one component with different known sizes (and no edit choosing one) | Warning |
+| `component_size_old_project` | a project file older than version 3 has no sizes: all are written as 0 | Warning |
+| `matrix_layout` | a setting the project cannot satisfy | Error |
 
 A saved project is confirmed by construction (Phase 1 saves only confirmed panels); the
 GUI exports only a confirmed panel.
@@ -431,8 +447,11 @@ frames, leaving out fields at their default:
 ]
 ```
 
-Version 2 added `component_edits` and `panel_parts[].part_number` (and fills the panel
-parts' `package`); version 1 projects still open.
+Version 3 added the component sizes: `width`, `length` and `height` in `placements`,
+`panel_parts` and `component_edits`. Version 2 added `component_edits` and
+`panel_parts[].part_number` (and fills the panel parts' `package`). Older projects still
+open; reopening a version 1 or 2 project with its export takes the sizes from the export
+without counting that as a difference from the saved project.
 
 ## Tests
 

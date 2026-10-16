@@ -144,6 +144,7 @@ def _panel_part(job: OdbJob, side: str, comp: OdbComponent, tf: Transform, flip:
         side = "bottom" if side == "top" else "top"
     rot = compose_rotation(ccw_from_odb(comp.rotation), tf)
     pkg = _package(job, step, comp)
+    width, length = _body_size(pkg)
     return PanelPartInfo(
         comp.name,
         comp.part_name,
@@ -155,7 +156,15 @@ def _panel_part(job: OdbJob, side: str, comp: OdbComponent, tf: Transform, flip:
         norm_angle(-rot),
         step,
         attributes=comp.all_attributes(),
+        width=width,
+        length=length,
+        height=comp.height,
     )
+
+
+def _body_size(pkg: Package | None) -> tuple[float, float]:
+    """Width and length of the package body (0, 0 when unknown)."""
+    return (pkg.body_size if pkg is not None else None) or (0.0, 0.0)
 
 
 def _placements(job: OdbJob, step: str, comps: list[tuple[str, OdbComponent]]) -> list[PlacementInfo]:
@@ -168,6 +177,7 @@ def _placements(job: OdbJob, step: str, comps: list[tuple[str, OdbComponent]]) -
             for shape in pkg.outlines:
                 for poly in shape.polygons():
                     body.append([tf.apply(x, y) for x, y in poly])
+        width, length = _body_size(pkg)
         out.append(
             PlacementInfo(
                 designator=comp.name,
@@ -182,6 +192,9 @@ def _placements(job: OdbJob, step: str, comps: list[tuple[str, OdbComponent]]) -
                 attributes=comp.all_attributes(),
                 toeprints=[(t.x, t.y) for t in comp.toeprints],
                 body=body,
+                width=width,
+                length=length,
+                height=comp.height,
                 written=comp.name,
             )
         )
@@ -618,6 +631,9 @@ def _carried(p: PlacementInfo, tf: Transform) -> PlacementInfo:
         attributes=p.attributes,
         toeprints=[tf.apply(tx, ty) for tx, ty in p.toeprints],
         body=[[tf.apply(bx, by) for bx, by in poly] for poly in p.body],
+        width=p.width,
+        length=p.length,
+        height=p.height,
     )
 
 

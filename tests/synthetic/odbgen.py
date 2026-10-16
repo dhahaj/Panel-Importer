@@ -163,6 +163,8 @@ LAYERS: list[tuple[str, str, str]] = [
 ]
 # OPTION-type component attributes are written as option indices.
 COMPONENT_OPTIONS = {".comp_mount_type": ["other", "smt", "thmt", "pressfit"]}
+# FLOAT component attributes that are lengths: given in mm, written in the job's units.
+COMPONENT_LENGTHS = {".comp_height"}
 SIDE_LAYERS = {
     "top": ("top_paste", "top_copper", "top_mask"),
     "bottom": ("bottom_paste", "bottom_copper", "bottom_mask"),
@@ -379,6 +381,8 @@ class Job:
                         parts.append(f"{idx}")
                     elif k in COMPONENT_OPTIONS:
                         parts.append(f"{idx}={COMPONENT_OPTIONS[k].index(v)}")
+                    elif k in COMPONENT_LENGTHS:
+                        parts.append(f"{idx}={self.c(float(v))}")
                     else:
                         parts.append(f"{idx}={attr_texts.setdefault(v, len(attr_texts))}")
                 attrs = ";" + ",".join(parts)

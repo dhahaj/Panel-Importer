@@ -19,6 +19,7 @@ from panelimport.io.bom import Bom
 from panelimport.io.odb.job import OdbJob
 from panelimport.model.issues import Issue, Severity
 from panelimport.model.panel import (
+    SIZE_FIELDS,
     Acknowledgement,
     Circuit,
     CircuitReference,
@@ -106,6 +107,9 @@ class PlacementInfo:
     part_number: str = ""
     toeprints: list[tuple[float, float]] = field(default_factory=list)
     body: list[list[tuple[float, float]]] = field(default_factory=list)  # board frame
+    width: float = 0.0  # body size, mm (see model.panel); 0 = unknown
+    length: float = 0.0
+    height: float = 0.0
     paste: PasteResult | None = None
     written: str = ""  # designator as written in the export
     state: str = ""  # "" as exported | "edited" | "added" | "removed"
@@ -131,6 +135,9 @@ class PanelPartInfo:
     step: str
     part_number: str = ""
     attributes: dict[str, str] = field(default_factory=dict)
+    width: float = 0.0  # as PlacementInfo
+    length: float = 0.0
+    height: float = 0.0
     state: str = ""  # as PlacementInfo.state
     export: dict[str, object] = field(default_factory=dict)
     edit: ComponentEdit | None = None
@@ -390,6 +397,9 @@ class PanelAnalysis:
                     rotation=r6(p.rotation),
                     rotation_raw=r6(p.rotation_raw),
                     attributes=dict(sorted(p.attributes.items())),
+                    width=r6(p.width),
+                    length=r6(p.length),
+                    height=r6(p.height),
                 )
                 for p in self.placements
             ],
@@ -404,6 +414,9 @@ class PanelAnalysis:
                     package=p.package,
                     rotation=r6(p.rotation),
                     rotation_raw=r6(p.rotation_raw),
+                    width=r6(p.width),
+                    length=r6(p.length),
+                    height=r6(p.height),
                 )
                 for p in self.panel_parts
             ],
@@ -437,6 +450,7 @@ def rounded_edit(e: ComponentEdit) -> ComponentEdit:
         x=None if e.x is None else r6(e.x),
         y=None if e.y is None else r6(e.y),
         rotation=None if e.rotation is None else angle6(e.rotation),
+        **{f: r6(getattr(e, f)) for f in SIZE_FIELDS if getattr(e, f) is not None},
     )
 
 

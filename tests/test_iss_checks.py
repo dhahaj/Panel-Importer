@@ -187,5 +187,3 @@ def test_setting_dependent_errors(tmp_path):
     prepared = issues(project, IssSettings(circuit_layout="matrix"))
     assert codes(prepared) == ["matrix_layout"]
     assert_refused(prepared, tmp_path)
-    prepared = issues(make_project(), IssSettings(component_size="body"))
-    assert codes(prepared) == ["component_size_body"]

@@ -328,6 +328,25 @@ def test_components_spec_example():
     assert c400.mirror and c400.id == "77" and c400.part_name == "???"
 
 
+def test_component_height_is_in_the_files_units():
+    text = """UNITS=INCH
+@0 .comp_height
+CMP 0 1 1 0 N R1 X ;0=0.0217
+CMP 0 2 2 0 N R2 X ;0=0.0000
+CMP 0 3 3 0 N R3 X
+"""
+    cf, problems = parse_components(text, "c", Units.MM, AttrDefs())
+    assert not problems.to_issues()
+    assert [c.height for c in cf.components] == pytest.approx([0.0217 * INCH, 0.0, 0.0])  # 0: not given
+    text = """UNITS=MM
+@0 .COMP_HEIGHT
+CMP 0 1 1 0 N R1 X ;0=1.25
+CMP 0 2 2 0 N R2 X ;0=tall
+"""
+    cf, _problems = parse_components(text, "c", Units.INCH, AttrDefs())
+    assert [c.height for c in cf.components] == [1.25, 0.0]
+
+
 def test_components_unknown_record():
     _cf, problems = parse_components("CMP 0 1 1 0 N R1 X\nXYZ 1\n", "c", Units.MM, AttrDefs())
     assert [i.code for i in problems.to_issues()] == ["unknown_record"]
@@ -406,6 +425,29 @@ def test_eda_spec_example():
     assert p0.outlines[0].kind == "rect" and p0.pins[1].outlines[0].kind == "circle"
     assert p1.outlines[0].kind == "contour" and len(p1.outlines[0].polygons()[0]) > 8
     assert "string" not in p1.properties  # PRP after FGR belongs to the feature group
+
+
+def test_package_body_size_leaves_out_the_pins():
+    text = """UNITS=MM
+PKG A 1 -2 -1 2 1
+RC -1.5 -0.5 3 1
+PIN 1 S -1.8 0 0 E S
+RC -2 -0.4 0.4 0.8
+PKG B 1 -0.5 -0.5 0.5 0.5
+PIN 1 S 0 0 0 E S
+CR 0 0 0.5
+PKG C 1 -1 -1 1 1
+CR 0 0 0.75
+SQ 0.5 0 0.5
+"""
+    eda, problems = parse_eda(text, "e", Units.INCH)
+    assert not problems.to_issues()
+    a, b, c = eda.packages
+    assert a.body_size == pytest.approx((3.0, 1.0))  # the pin's outline reaches further and is left out
+    assert b.body_size is None  # pins only: no body
+    assert c.body_size == pytest.approx((1.75, 1.5))  # every body outline counts
+    inch, _problems = parse_eda("UNITS=INCH\nPKG D 0.05 -0.1 -0.05 0.1 0.05\nRC -0.1 -0.05 0.2 0.1\n", "e", Units.MM)
+    assert inch.packages[0].body_size == pytest.approx((0.2 * INCH, 0.1 * INCH))
 
 
 def test_eda_unknown_record():

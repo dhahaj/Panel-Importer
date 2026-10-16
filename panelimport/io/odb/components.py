@@ -9,6 +9,7 @@ Detex part number may arrive in any of them.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from panelimport.io.odb.attributes import AttrDefs, resolve_attributes
@@ -24,6 +25,8 @@ from panelimport.io.odb.common import (
 BOM_RECORDS = frozenset(
     ("CPN", "PKG", "IPN", "DSC", "VPL_VND", "VPL_MPN", "VND", "MPN", "LNFILE", "QLF", "CHS", "PRIORITY")
 )
+#: The component height attribute (FLOAT, in the file's units).
+HEIGHT_ATTRIBUTE = ".comp_height"
 
 
 @dataclass(slots=True)
@@ -55,6 +58,7 @@ class OdbComponent:
     properties: dict[str, str] = field(default_factory=dict)
     bom: list[tuple[str, str]] = field(default_factory=list)
     toeprints: list[Toeprint] = field(default_factory=list)
+    height: float = 0.0  # mm, from .comp_height; 0 = not given
 
     def all_attributes(self) -> dict[str, str]:
         """Attributes, ``PRP`` properties and BOM fields in one flat mapping.
@@ -208,4 +212,18 @@ def parse_components(
 
     for comp in cf.components:
         comp.attributes = resolve_attributes(comp.attrs_raw, cf.attr_names, cf.attr_texts, defs)
+        comp.height = _height(comp.attributes, scale)
     return cf, problems
+
+
+def _height(attributes: dict[str, str], scale: float) -> float:
+    """``.comp_height`` in mm (it is in the file's units, like the coordinates); 0 when
+    missing, unreadable or not positive."""
+    for key, value in attributes.items():
+        if key.lower() == HEIGHT_ATTRIBUTE:
+            try:
+                height = float(value) * scale
+            except ValueError:
+                return 0.0
+            return height if math.isfinite(height) and height > 0 else 0.0
+    return 0.0

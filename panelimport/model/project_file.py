@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 from panelimport.io.odb.archive import source_sha256
 from panelimport.model.issues import Issue, error, warning
-from panelimport.model.panel import PROJECT_FORMAT, PROJECT_VERSION, READABLE_VERSIONS, ComponentEdit, PanelProject
+from panelimport.model.panel import (
+    PROJECT_FORMAT,
+    PROJECT_VERSION,
+    READABLE_VERSIONS,
+    SIZE_FIELDS,
+    SIZES_VERSION,
+    ComponentEdit,
+    PanelProject,
+)
 from panelimport.model.serialize import SerializationError, from_jsonable, to_jsonable
 
 PROJECT_SUFFIX = ".panel.json"
@@ -120,7 +128,21 @@ FILE_FIELDS = frozenset({"format", "version", "generator"})
 
 
 def diff_projects(a: PanelProject, b: PanelProject) -> list[str]:
-    """Top-level fields that differ between two projects (for the reopen self-check)."""
+    """Top-level fields that differ between two projects (for the reopen self-check).
+
+    What a project file older than one of them cannot hold (component sizes before
+    version 3) is not compared."""
+    if min(a.version, b.version) < SIZES_VERSION:
+        a, b = _without_sizes(a), _without_sizes(b)
     return [
         f.name for f in fields(PanelProject) if f.name not in FILE_FIELDS and getattr(a, f.name) != getattr(b, f.name)
     ]
+
+
+def _without_sizes(p: PanelProject) -> PanelProject:
+    unknown = {f: 0.0 for f in SIZE_FIELDS}
+    return replace(
+        p,
+        placements=[replace(x, **unknown) for x in p.placements],
+        panel_parts=[replace(x, **unknown) for x in p.panel_parts],
+    )

@@ -25,6 +25,9 @@ The ISS values are derived from the transformed geometry:
 
 Angles follow the geometry: a part's angle is the direction of its rotated X axis, so
 a left-right flip maps θ to 180° − θ and a front-back flip maps θ to −θ.
+
+Component sizes are in the part's own frame (``witdh`` along its X axis at angle 0), so
+the panel's flip and rotation do not change them; an angle offset of ±90° does.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ from dataclasses import dataclass, field
 
 from panelimport.analysis.transforms import Transform, norm_angle
 from panelimport.iss.settings import IssSettings
-from panelimport.model.panel import PanelProject
+from panelimport.model.panel import SIZE_FIELDS, PanelProject
 
 #: Decimals JaNets stores (``.x21`` shows ``41.7830``); every written number is rounded to it.
 DECIMALS = 4
@@ -84,6 +87,15 @@ class ProgramComponent:
     width: float = 0.0
     length: float = 0.0
     height: float = 0.0
+
+
+@dataclass
+class SizeConflict:
+    """Placements of one component that know different sizes for it."""
+
+    component: str
+    fields: list[str]  # the size fields whose known values differ
+    sizes: list[tuple[str, tuple[float, float, float]]]  # (designator, (width, length, height)), one per size
 
 
 @dataclass
@@ -264,6 +276,8 @@ class IssLayout:
     skipped_panel_parts: list[str] = field(default_factory=list)
     # Placements whose component name fell back to the part name.
     part_name_fallbacks: list[str] = field(default_factory=list)
+    # Components whose placements know different sizes (component_size=body).
+    size_conflicts: list[SizeConflict] = field(default_factory=list)
     # Uniform grid for MATRIX output: (nx, ny, pitch_x, pitch_y), or None.
     matrix: tuple[int, int, float, float] | None = None
 
@@ -331,6 +345,7 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
 
     placements: list[ProgramPlacement] = []
     components: dict[str, ProgramComponent] = {}
+    members: dict[str, list] = {}  # component name -> its placements
     fallbacks = []
     for p in project.placements:
         name = component_name(p)
@@ -348,6 +363,19 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         )
         if name and name not in components:
             components[name] = ProgramComponent(name, component_comment(p, settings.comment_attributes))
+        if name:
+            members.setdefault(name, []).append(p)
+    conflicts = []
+    if settings.component_size == "body":
+        edited = size_edits(project)
+        offset = settings.angle_offset + (settings.bottom_angle_offset if machine.side == "bottom" else 0.0)
+        for name, comp in components.items():
+            size, conflict = component_size(name, members[name], edited)
+            if quarter_turned(offset):
+                size = (size[1], size[0], size[2])
+            comp.width, comp.length, comp.height = size
+            if conflict is not None:
+                conflicts.append(conflict)
 
     fiducials = []
     other = []
@@ -386,6 +414,7 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         other_layer_fiducials=other,
         skipped_panel_parts=[p.designator for p in project.panel_parts if not is_fiducial_part(project, p)],
         part_name_fallbacks=fallbacks,
+        size_conflicts=conflicts,
     )
     grid = uniform_grid(circuits)
     if grid is not None:
@@ -394,6 +423,46 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         if settings.circuit_layout == "matrix":
             _rebase_matrix(layout, x0, y0)
     return layout
+
+
+def size_edits(project: PanelProject) -> dict[str, set[str]]:
+    """The size fields a Phase 1 edit set, by board-level designator."""
+    out: dict[str, set[str]] = {}
+    for e in project.component_edits:
+        if e.level == "board":
+            fields = {f for f in SIZE_FIELDS if getattr(e, f) is not None}
+            if fields:
+                out[e.designator] = fields
+    return out
+
+
+def component_size(
+    name: str, placements: list, edited: dict[str, set[str]]
+) -> tuple[tuple[float, float, float], SizeConflict | None]:
+    """One size for a component from its placements.  Per dimension: what an edit set
+    (edits are deliberate and override the export for the whole component), else what
+    the export says; 0 when none knows it.  Known values that differ within that choice
+    are a conflict, and the first placement's is used."""
+    size: list[float] = []
+    differ = []
+    for f in SIZE_FIELDS:
+        pool = [p for p in placements if f in edited.get(p.designator, ())] or placements
+        known = [r4(getattr(p, f)) for p in pool if getattr(p, f) > 0]
+        size.append(known[0] if known else 0.0)
+        if len(set(known)) > 1:
+            differ.append(f)
+    if not differ:
+        return (size[0], size[1], size[2]), None
+    distinct: dict[tuple[float, float, float], str] = {}
+    for p in placements:
+        distinct.setdefault((r4(p.width), r4(p.length), r4(p.height)), p.designator)
+    return (size[0], size[1], size[2]), SizeConflict(name, differ, [(d, s) for s, d in distinct.items()])
+
+
+def quarter_turned(offset: float) -> bool:
+    """Whether an angle offset turns the parts by an odd multiple of 90° (their X and Y swap)."""
+    quarters = round(offset / 90.0)
+    return abs(offset - quarters * 90.0) < 1e-6 and quarters % 2 == 1
 
 
 def _rebase_matrix(layout: IssLayout, dx: float, dy: float) -> None:

@@ -1,14 +1,15 @@
 """Parser for ODB++ ``steps/<step>/eda/data``.
 
 Phase 1 needs the packages (``PKG``) with their outlines and pins (``PIN``) for package
-names and body outlines.  Net (``NET``, ``SNT``, ``FID``) and feature-group (``FGR``)
-records are recognised and skipped.
+names, body outlines and body sizes.  Net (``NET``, ``SNT``, ``FID``) and feature-group
+(``FGR``) records are recognised and skipped.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from functools import cached_property
 
 from panelimport.io.odb.common import (
     FileProblems,
@@ -69,6 +70,18 @@ class Package:
     outlines: list[OutlineShape] = field(default_factory=list)
     pins: list[PackagePin] = field(default_factory=list)
     properties: dict[str, str] = field(default_factory=dict)
+
+    @cached_property
+    def body_size(self) -> tuple[float, float] | None:
+        """X and Y extent (mm) of the body outline in the package's own frame (rotation 0),
+        pins not included; None when the package has no body outline.  (Read once the
+        package is parsed: many components share it.)"""
+        points = [p for shape in self.outlines for poly in shape.polygons() for p in poly]
+        if not points:
+            return None
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        return max(xs) - min(xs), max(ys) - min(ys)
 
 
 @dataclass

@@ -102,7 +102,7 @@ def test_attribute_order_is_the_skeletons():
     text = _text()
     assert '<placementPosition x="' in text and '" rangeOver="False" />' in text
     assert re.search(r'<allocation index="1" x="[^"]+" y="[^"]+" angle="[^"]+" rangeOver="0" />', text)
-    assert re.search(r'<componentSize witdh="0" length="0" height="0" />', text)
+    assert re.search(r'<componentSize witdh="1.6" length="0.8" height="0.55" />', text)
     assert '<headPlacement total="4" completion="0" />' in text
 
 

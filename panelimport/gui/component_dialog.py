@@ -2,6 +2,7 @@
 
 Coordinates are the ones the components table shows: circuit-relative for board-level
 components (placed in every circuit), panel coordinates for panel-level components.
+Sizes are in the part's own frame (rotation 0); 0 is unknown.
 """
 
 from __future__ import annotations
@@ -29,10 +30,19 @@ from PySide6.QtWidgets import (
 from panelimport.analysis.edits import EPS, REASON_LABELS, TEXT_FIELDS, all_parts, find_part, natural_key, shown_values
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.analysis.transforms import angle_diff
+from panelimport.model.panel import SIZE_FIELDS
 
 Key = tuple[str, str]
 LEVEL_LABELS = {"board": "Board — placed in every circuit", "panel": "Panel — placed once"}
 HINT_STYLE = "color: #8b949e;"
+UNKNOWN = "unknown"  # a size of 0
+KEEP = "(keep each one's)"
+SIZE_TIPS = {
+    "width": "Body size along the part's X axis at rotation 0 (ISS componentSize witdh)",
+    "length": "Body size along the part's Y axis at rotation 0 (ISS componentSize length)",
+    "height": "Body height (ISS componentSize height)",
+}
+NUMBER_FIELDS = ("x", "y", "rotation") + SIZE_FIELDS
 
 
 def _spin(lo: float, hi: float, decimals: int, suffix: str) -> QDoubleSpinBox:
@@ -83,6 +93,16 @@ class ComponentDialog(QDialog):
         self.rotation = _spin(0, 360, 3, "°")
         self.rotation.setWrapping(True)
         self.rotation.setSingleStep(90)
+        self.sizes = {f: _spin(0, 1000, 4, " mm") for f in SIZE_FIELDS}
+        for field, box in self.sizes.items():
+            box.setSpecialValueText(KEEP if self.mode == "many" else UNKNOWN)
+            box.setToolTip(SIZE_TIPS[field] + ("" if self.mode == "many" else "; 0 = unknown"))
+        self.size_note = QLabel(
+            "Body size in the part's own frame, from the ODB++ package outline and .comp_height. The ISS "
+            "program has one size per part number: an edited size is used for all its placements."
+        )
+        self.size_note.setWordWrap(True)
+        self.size_note.setStyleSheet(HINT_STYLE)
         self.note = QLineEdit()
         self.note.setPlaceholderText("optional: why, for the record")
         self.frame = QLabel("")
@@ -101,6 +121,7 @@ class ComponentDialog(QDialog):
             "x": self.x,
             "y": self.y,
             "rotation": self.rotation,
+            **self.sizes,
         }
         self.hints: dict[str, QLabel] = {}
         self.resets: dict[str, QToolButton] = {}
@@ -123,6 +144,9 @@ class ComponentDialog(QDialog):
         ):
             form.addRow(label, self._with_hint(field))
         form.addRow("", self.frame)
+        for label, field in (("Width (X)", "width"), ("Length (Y)", "length"), ("Height", "height")):
+            form.addRow(label, self._with_hint(field))
+        form.addRow("", self.size_note)
         form.addRow("Note", self.note)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -182,7 +206,7 @@ class ComponentDialog(QDialog):
             self.package.lineEdit().setPlaceholderText("(keep each one's)")
             for field in ("layer", "x", "y", "rotation"):
                 self.editors[field].setEnabled(False)
-            self.frame.setText("Fields left empty keep each component's value.")
+            self.frame.setText(f"Fields left empty or at {KEEP} keep each component's value.")
             return
         if self.mode == "add":
             self.setWindowTitle("Add component")
@@ -222,8 +246,8 @@ class ComponentDialog(QDialog):
         value, export = self._get(field), self.export[field]
         if field == "rotation":
             return angle_diff(value, export) > 10 ** -self.rotation.decimals() / 2 + EPS
-        if field in ("x", "y"):
-            return abs(value - export) > 10 ** -self.x.decimals() / 2 + EPS
+        if field in NUMBER_FIELDS:
+            return abs(value - export) > 10 ** -self.editors[field].decimals() / 2 + EPS
         return value != export
 
     def _refresh_hints(self) -> None:
@@ -232,7 +256,12 @@ class ComponentDialog(QDialog):
         for field in self.editors:
             differs = self._differs(field)
             value = self.export[field]
-            text = f"{value:.4f}" if field in ("x", "y") else (f"{value:.3f}°" if field == "rotation" else (value or "(empty)"))
+            if field in SIZE_FIELDS:
+                text = f"{value:.4f}" if value else UNKNOWN
+            elif field in ("x", "y"):
+                text = f"{value:.4f}"
+            else:
+                text = f"{value:.3f}°" if field == "rotation" else (value or "(empty)")
             self.hints[field].setText(f"export: {text}")
             self.hints[field].setVisible(differs)
             self.resets[field].setVisible(differs)
@@ -272,14 +301,15 @@ class ComponentDialog(QDialog):
         return self.designator.text().strip()
 
     def values(self) -> dict[str, object]:
-        """The values entered; for several components only the text fields filled in.
+        """The values entered; for several components only the text fields filled in and
+        the sizes set.
 
         A number the spin box shows rounded but nobody changed comes back exact (the
         current or the export value), so that OK alone never creates an edit."""
         if self.mode == "many":
-            return {f: self._get(f) for f in TEXT_FIELDS if self._get(f)}
+            return {f: self._get(f) for f in TEXT_FIELDS + SIZE_FIELDS if self._get(f)}
         out = {f: self._get(f) for f in self.editors}
-        for field in ("x", "y", "rotation"):
+        for field in NUMBER_FIELDS:
             half = 10 ** -self.editors[field].decimals() / 2 + EPS
             for known in (self.initial, self.export):
                 if known is None:

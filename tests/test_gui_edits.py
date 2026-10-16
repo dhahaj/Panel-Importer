@@ -207,6 +207,43 @@ def test_edit_several_components(window, tmp_path, app, dialogs):
     assert window.controller.undo_stack.undoText() == "Edit C1, C2"
 
 
+def test_edit_component_sizes(window, tmp_path, app, dialogs):
+    answers, _seen = dialogs
+    open_panel(window, tmp_path, app)
+
+    def fill(d):
+        width, height = d.editors["width"], d.editors["height"]
+        assert width.value() == pytest.approx(1.6) and height.text() == "unknown"  # no .comp_height
+        height.setValue(0.55)
+        assert d.hints["height"].isVisibleTo(d) and d.hints["height"].text() == "export: unknown"
+        assert not d.hints["width"].isVisibleTo(d)
+
+    answers.append(fill)
+    window.edit_components([("board", "C1")])
+    c1 = E.find_part(window.analysis, "board", "C1")
+    assert c1.state == "edited" and c1.height == 0.55 and c1.export == {"height": 0.0}
+    row = _row(window.components_panel, ("board", "C1"))
+    assert row[FIELD_COLUMNS["width"]].text() == "1.600" and row[FIELD_COLUMNS["width"]].toolTip() == ""
+    assert row[FIELD_COLUMNS["height"]].text() == "0.550" and row[FIELD_COLUMNS["height"]].toolTip() == "Export: -"
+    assert row[COL_STATUS].text() == "edited: size"
+    assert _row(window.components_panel, ("board", "U1"))[FIELD_COLUMNS["height"]].text() == "-"
+    window._component_selected("C1")
+    table = window.inspector.table
+    rows = [(table.item(r, 0).text(), table.item(r, 1).text()) for r in range(table.rowCount())]
+    h = rows.index(("Height (mm)", "0.5500"))
+    assert rows[h + 1] == ("    export", "unknown") and ("Width (X, mm)", "1.6000") in rows
+
+    # Several at once: a size that is set applies to each, the others stay each one's.
+    def fill_many(d):
+        assert d.mode == "many" and d.editors["width"].isEnabled() and d.editors["width"].text() == "(keep each one's)"
+        d.editors["height"].setValue(0.9)
+
+    answers.append(fill_many)
+    window.edit_components([("board", "C1"), ("board", "U1")])
+    sizes = [E.find_part(window.analysis, "board", n) for n in ("C1", "U1")]
+    assert [(round(p.width, 4), round(p.length, 4), p.height) for p in sizes] == [(1.6, 0.8, 0.9), (5.31, 3.9, 0.9)]
+
+
 def test_remove_part_from_the_issue_list(window, tmp_path, app, dialogs):
     answers, seen = dialogs
     open_panel(window, tmp_path, app)

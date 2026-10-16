@@ -40,6 +40,9 @@ def placements(layer: str = "top", parts=PARTS) -> list[Placement]:
             rotation=rot,
             rotation_raw=(360.0 - rot) % 360.0,
             attributes={"DSC": f"Description of {d}"},
+            width=1.6,
+            length=0.8,
+            height=0.55,
         )
         for d, x, y, rot, pn in parts
     ]

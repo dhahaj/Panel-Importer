@@ -51,8 +51,10 @@ class IssSettings:
     header_completion: str = "zero"
     # Test switch: stub model/componentData records (known to hang JaNets when its database lock is held).
     model_component_stubs: bool = False
-    # "zero" writes witdh/length/height 0 (JaNets fills them in); "body" = package bounding box (untested).
-    component_size: str = "zero"
+    # componentSize: "body" writes each component's body size and height from the project
+    # (package outline and .comp_height, or as edited in Phase 1; 0 where unknown);
+    # "zero" writes witdh/length/height 0 for every component.
+    component_size: str = "body"
     # Placement attributes tried, in order, for the component comment.
     comment_attributes: list[str] = field(default_factory=lambda: ["DSC", "Description", "Comment"])
     line_name: str = "Line"

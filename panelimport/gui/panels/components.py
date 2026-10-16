@@ -37,12 +37,19 @@ COLUMNS = [
     "X (mm)",
     "Y (mm)",
     "Rotation (°)",
+    "Width (mm)",
+    "Length (mm)",
+    "Height (mm)",
     "Paste check",
     "Status",
 ]
-COL_DESIGNATOR, COL_LEVEL, COL_SIDE, COL_X, COL_STATUS = 0, 1, 5, 6, 10
-FIELD_COLUMNS = {"part_name": 2, "part_number": 3, "package": 4, "layer": 5, "x": 6, "y": 7, "rotation": 8}
-NUMERIC = {6, 7, 8}
+COL_DESIGNATOR, COL_LEVEL, COL_SIDE, COL_X, COL_STATUS = 0, 1, 5, 6, 13
+FIELD_COLUMNS = {
+    "part_name": 2, "part_number": 3, "package": 4, "layer": 5, "x": 6, "y": 7, "rotation": 8,
+    "width": 9, "length": 10, "height": 11,
+}  # fmt: skip
+NUMERIC = {6, 7, 8, 9, 10, 11}
+SIZES = {9, 10, 11}  # 0 is unknown, shown as "-"
 SORT_ROLE = Qt.UserRole + 1
 KEY_ROLE = Qt.UserRole + 2  # (level, designator) on the designator cell
 STATE_ROLE = Qt.UserRole + 3
@@ -153,7 +160,7 @@ class ComponentsPanel(QWidget):
         )
         self.act_edit = self._action(
             "Edit…",
-            "Change part name, part number, package, side, position or rotation",
+            "Change part name, part number, package, side, position, rotation or size",
             QKeySequence(Qt.Key_F2),
             lambda: self._emit(self.editRequested),
         )
@@ -369,12 +376,15 @@ class ComponentsPanel(QWidget):
             values["x"],
             values["y"],
             values["rotation"],
+            values["width"],
+            values["length"],
+            values["height"],
             (part.paste.describe() if part.paste else "-") if level == "board" else "",
             status_text(part),
         ]
         row = []
         for col, v in enumerate(cells):
-            item = QStandardItem(f"{v:.3f}" if col in NUMERIC else str(v))
+            item = QStandardItem(_number(col, v) if col in NUMERIC else str(v))
             item.setData(v if col in NUMERIC else _natural_key(str(v)), SORT_ROLE)
             if col in NUMERIC:
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -395,7 +405,7 @@ class ComponentsPanel(QWidget):
             col = FIELD_COLUMNS[f]
             if part.state != "removed":
                 row[col].setForeground(QBrush(theme.EDITED))
-            shown = f"{old:.3f}" if col in NUMERIC else (old or "(empty)")
+            shown = _number(col, old) if col in NUMERIC else (old or "(empty)")
             row[col].setToolTip(f"Export: {shown}")
         if part.state == "edited":
             row[COL_STATUS].setForeground(QBrush(theme.EDITED))
@@ -414,6 +424,10 @@ class ComponentsPanel(QWidget):
             if n:
                 text += f" · {n} {state}"
         return text
+
+
+def _number(col: int, v: float) -> str:
+    return "-" if col in SIZES and not v else f"{v:.3f}"
 
 
 def _natural_key(text: str) -> str:

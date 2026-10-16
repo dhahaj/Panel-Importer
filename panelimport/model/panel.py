@@ -1,6 +1,8 @@
 """Model dataclasses.  The project file (``<name>.panel.json``) is their direct serialization.
 
 Units are mm, angles are degrees counter-clockwise, placements are circuit-relative.
+Component sizes are the body's extent along the part's own X axis (``width``) and Y axis
+(``length``) at rotation 0, and its ``height``; 0 means unknown.
 Panel-level coordinates (outline, circuit reference, panel parts, fiducials) are in the
 panel frame, whose origin is described by :class:`PanelOrigin`.
 """
@@ -13,8 +15,10 @@ from typing import Literal
 from panelimport.settings import Settings
 
 PROJECT_FORMAT = "panel-project"
-PROJECT_VERSION = 2  # 2: component_edits, panel_parts[].part_number
-READABLE_VERSIONS = (1, 2)
+PROJECT_VERSION = 3  # 2: component_edits, panel_parts[].part_number; 3: component sizes
+READABLE_VERSIONS = (1, 2, 3)
+#: The first version whose placements, panel parts and edits carry component sizes.
+SIZES_VERSION = 3
 
 #: Why a component is not placed.
 REMOVAL_REASONS = ("through-hole", "not-populated", "mechanical", "other")
@@ -95,6 +99,9 @@ class Placement:
     rotation: float = 0.0
     rotation_raw: float = 0.0
     attributes: dict[str, str] = field(default_factory=dict)
+    width: float = 0.0
+    length: float = 0.0
+    height: float = 0.0
 
 
 @dataclass
@@ -108,6 +115,9 @@ class PanelPart:
     package: str = ""
     rotation: float = 0.0
     rotation_raw: float = 0.0
+    width: float = 0.0
+    length: float = 0.0
+    height: float = 0.0
 
 
 @dataclass
@@ -148,7 +158,8 @@ class ComponentEdit:
 
     ``level`` "board" components are placed in every circuit and their x/y are
     circuit-relative, like ``placements``; "panel" components are placed once and their
-    x/y are in the panel frame, like ``panel_parts``.  Rotation is CCW degrees.
+    x/y are in the panel frame, like ``panel_parts``.  Rotation is CCW degrees.  A size
+    of 0 sets that dimension to unknown.
     """
 
     designator: str = ""
@@ -164,6 +175,9 @@ class ComponentEdit:
     x: float | None = None
     y: float | None = None
     rotation: float | None = None
+    width: float | None = None
+    length: float | None = None
+    height: float | None = None
 
     @property
     def key(self) -> tuple[str, str]:
@@ -180,7 +194,9 @@ class ComponentEdit:
 
 
 #: Component fields an edit can set, in display order.
-EDIT_FIELDS = ("part_name", "part_number", "package", "layer", "x", "y", "rotation")
+EDIT_FIELDS = ("part_name", "part_number", "package", "layer", "x", "y", "rotation", "width", "length", "height")
+#: The size fields among them (mm, 0 = unknown).
+SIZE_FIELDS = ("width", "length", "height")
 
 
 @dataclass(frozen=True)
