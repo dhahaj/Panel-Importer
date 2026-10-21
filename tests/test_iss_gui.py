@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPointF, QRectF  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QRectF  # noqa: E402
 from PySide6.QtGui import QPainterPath  # noqa: E402
 from PySide6.QtWidgets import QFileDialog  # noqa: E402
 
@@ -102,45 +102,55 @@ def _open_export_dialog(window, app, monkeypatch) -> ExportIssDialog:
 
 
 def _paste_pads(window, side: str = "top") -> list[tuple[float, float]]:
-    """Centres of the paste pads, in the project's panel frame, except those under a
-    centroid (its dot is drawn over the paste)."""
-    a = window.analysis
-    centroids = [a.circuit_position(p, c)[:2] for c in a.circuits for p in a.placements]
+    """Centres of the paste pads, in the project's panel frame."""
     out = []
-    for draw in a.layer_draws():
+    for draw in window.analysis.layer_draws():
         if draw.role == f"paste_{side}":
             ff = draw.job.features(draw.step, draw.layer)
             out += [draw.transform.apply(p.x, p.y) for p in ff.pads if p.positive]
-    return [q for q in out if all(math.hypot(q[0] - x, q[1] - y) > 0.5 for x, y in centroids)]
+    return out
 
 
-def _paste_drawn_at(dlg: ExportIssDialog, pads: list[tuple[float, float]]) -> list[bool]:
-    """For each pad: whether its centre in the preview changes when the paste is hidden."""
+def _centroids(window) -> list[tuple[float, float]]:
+    a = window.analysis
+    return [a.circuit_position(p, c)[:2] for c in a.circuits for p in a.placements]
+
+
+def _paste_drawn_at(dlg: ExportIssDialog, pads: list[tuple[float, float]], centroids: list[tuple[float, float]]) -> list[bool]:
+    """For each pad clear of the centroid dots (they are drawn over the paste, and how
+    many pads they cover depends on the preview's size): whether its centre in the
+    preview changes when the paste is hidden."""
     preview = dlg.preview
     machine, view = dlg.prepared.layout.machine, preview.view()
-    points = [view.map(QPointF(*machine.point(x, y))) for x, y in pads]
+    dots = [view.map(QPointF(*machine.point(x, y))) for x, y in centroids]
+    points = []
+    for x, y in pads:
+        p = view.map(QPointF(*machine.point(x, y)))
+        if all(math.hypot(p.x() - d.x(), p.y() - d.y()) > 4 for d in dots):
+            points.append(QPoint(math.floor(p.x()), math.floor(p.y())))  # the pixel holding the centre
+    assert len(points) >= len(pads) // 10  # enough to tell where the paste is
     dlg.show_paste.setChecked(True)
     shown = preview.grab().toImage()
     dlg.show_paste.setChecked(False)
     hidden = preview.grab().toImage()
     dlg.show_paste.setChecked(True)
-    return [shown.pixelColor(p.toPoint()) != hidden.pixelColor(p.toPoint()) for p in points]
+    return [shown.pixelColor(p) != hidden.pixelColor(p) for p in points]
 
 
 def test_export_preview_shows_the_paste_as_the_machine_sees_it(window, tmp_path, app, monkeypatch):
     _confirmed_top_panel(window, tmp_path, app)
-    pads = _paste_pads(window)
+    pads, centroids = _paste_pads(window), _centroids(window)
     assert pads
     dlg = _open_export_dialog(window, app, monkeypatch)
     assert dlg.prepared.layout.machine.side == "top"
     assert dlg.show_paste.isEnabled() and dlg.show_paste.text() == "Show the top paste"
     assert dlg.preview.paste_layers() and dlg.preview.paste_note() == " · top paste"
-    assert all(_paste_drawn_at(dlg, pads))
+    assert all(_paste_drawn_at(dlg, pads, centroids))
     # Turning the panel turns the paste with it.
     dlg.rotation.setCurrentText("90")
     app.processEvents()
     assert dlg.prepared.layout.machine.rotation == 90
-    assert all(_paste_drawn_at(dlg, pads))
+    assert all(_paste_drawn_at(dlg, pads, centroids))
     dlg.show_paste.setChecked(False)
     assert not dlg.preview.show_paste and dlg.preview.paste_note() == ""
     dlg.close()
