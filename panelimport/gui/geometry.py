@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
-from PySide6.QtGui import QPainterPath, QPolygonF, QTransform
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 
 from panelimport.io.odb.features import FeatureFile, arc_points
 from panelimport.io.odb.symbols import SymbolShape
@@ -116,6 +116,24 @@ def build_layer_geometry(ff: FeatureFile) -> LayerGeometry:
         ys = [v for s in segs for v in (s.y1(), s.y2())]
         rect = rect.united(QRectF(min(xs) - w, min(ys) - w, max(xs) - min(xs) + 2 * w, max(ys) - min(ys) + 2 * w))
     return LayerGeometry(pads, surfaces, sorted(by_width.items()), rect, count)
+
+
+def paint_layer(painter: QPainter, geo: LayerGeometry, color: QColor) -> None:
+    """Fill a layer's surfaces and pads and stroke its lines in the painter's current
+    transform (step frame); zero-width lines are drawn one pixel wide."""
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(color)
+    if not geo.surfaces.isEmpty():
+        painter.drawPath(geo.surfaces)
+    if not geo.pads.isEmpty():
+        painter.drawPath(geo.pads)
+    for width, lines in geo.lines:
+        pen = QPen(color, max(width, 0.0), Qt.SolidLine, Qt.RoundCap)
+        if width <= 0:
+            pen.setCosmetic(True)
+            pen.setWidthF(1.0)
+        painter.setPen(pen)
+        painter.drawLines(lines)
 
 
 def polygon_path(points, close: bool = True) -> QPainterPath:

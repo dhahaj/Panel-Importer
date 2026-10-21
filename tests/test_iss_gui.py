@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPointF, QRectF  # noqa: E402
+from PySide6.QtGui import QPainterPath  # noqa: E402
 from PySide6.QtWidgets import QFileDialog  # noqa: E402
 
+from panelimport.analysis.transforms import Transform  # noqa: E402
+from panelimport.gui.geometry import LayerGeometry  # noqa: E402
 from panelimport.gui.iss_dialogs import CompareDialog, ExportIssDialog  # noqa: E402
 from panelimport.iss.reader import read_program  # noqa: E402
 from panelimport.iss.settings import IssSettings  # noqa: E402
@@ -83,6 +88,109 @@ def test_export_iss_from_a_project_without_its_source(window, tmp_path, app, mon
     window.act_export_iss.trigger()
     assert (tmp_path / "Saved.iss").exists()  # named after the project
     assert read_program(tmp_path / "Saved.iss").pwb_id == "Saved"
+
+
+def _open_export_dialog(window, app, monkeypatch) -> ExportIssDialog:
+    seen = []
+    monkeypatch.setattr(ExportIssDialog, "exec", lambda dlg: seen.append(dlg) or 0)
+    window.export_iss()
+    dlg = seen[0]
+    dlg.resize(1400, 1000)
+    dlg.show()
+    app.processEvents()
+    return dlg
+
+
+def _paste_pads(window, side: str = "top") -> list[tuple[float, float]]:
+    """Centres of the paste pads, in the project's panel frame, except those under a
+    centroid (its dot is drawn over the paste)."""
+    a = window.analysis
+    centroids = [a.circuit_position(p, c)[:2] for c in a.circuits for p in a.placements]
+    out = []
+    for draw in a.layer_draws():
+        if draw.role == f"paste_{side}":
+            ff = draw.job.features(draw.step, draw.layer)
+            out += [draw.transform.apply(p.x, p.y) for p in ff.pads if p.positive]
+    return [q for q in out if all(math.hypot(q[0] - x, q[1] - y) > 0.5 for x, y in centroids)]
+
+
+def _paste_drawn_at(dlg: ExportIssDialog, pads: list[tuple[float, float]]) -> list[bool]:
+    """For each pad: whether its centre in the preview changes when the paste is hidden."""
+    preview = dlg.preview
+    machine, view = dlg.prepared.layout.machine, preview.view()
+    points = [view.map(QPointF(*machine.point(x, y))) for x, y in pads]
+    dlg.show_paste.setChecked(True)
+    shown = preview.grab().toImage()
+    dlg.show_paste.setChecked(False)
+    hidden = preview.grab().toImage()
+    dlg.show_paste.setChecked(True)
+    return [shown.pixelColor(p.toPoint()) != hidden.pixelColor(p.toPoint()) for p in points]
+
+
+def test_export_preview_shows_the_paste_as_the_machine_sees_it(window, tmp_path, app, monkeypatch):
+    _confirmed_top_panel(window, tmp_path, app)
+    pads = _paste_pads(window)
+    assert pads
+    dlg = _open_export_dialog(window, app, monkeypatch)
+    assert dlg.prepared.layout.machine.side == "top"
+    assert dlg.show_paste.isEnabled() and dlg.show_paste.text() == "Show the top paste"
+    assert dlg.preview.paste_layers() and dlg.preview.paste_note() == " · top paste"
+    assert all(_paste_drawn_at(dlg, pads))
+    # Turning the panel turns the paste with it.
+    dlg.rotation.setCurrentText("90")
+    app.processEvents()
+    assert dlg.prepared.layout.machine.rotation == 90
+    assert all(_paste_drawn_at(dlg, pads))
+    dlg.show_paste.setChecked(False)
+    assert not dlg.preview.show_paste and dlg.preview.paste_note() == ""
+    dlg.close()
+
+
+def _square(x: float, y: float, size: float = 2.0) -> LayerGeometry:
+    path = QPainterPath()
+    path.addRect(QRectF(x - size / 2, y - size / 2, size, size))
+    return LayerGeometry(path, QPainterPath(), [], path.boundingRect(), 1)
+
+
+def test_export_preview_turns_the_bottom_paste_over(app, tmp_path):
+    paste = {"top": [(_square(50, 62), Transform())], "bottom": [(_square(95, 62), Transform())]}
+    dlg = ExportIssDialog(make_project(layer="bottom"), IssSettings(), tmp_path / "b.iss", pwb_id="B", paste=paste)
+    dlg.resize(1400, 1000)
+    dlg.show()
+    app.processEvents()
+    assert dlg.show_paste.text() == "Show the bottom paste" and dlg.preview.paste_note() == " · bottom paste"
+
+    def drawn(x: float, y: float) -> bool:  # in the program frame
+        p = dlg.preview.view().map(QPointF(x, y)).toPoint()
+        dlg.show_paste.setChecked(False)
+        hidden = dlg.preview.grab().toImage().pixelColor(p)
+        dlg.show_paste.setChecked(True)
+        return dlg.preview.grab().toImage().pixelColor(p) != hidden
+
+    dlg.flip.setCurrentText("left-right")  # 100 × 70: not rotated
+    assert drawn(5, 62) and not drawn(95, 62) and not drawn(50, 62)  # the top paste is not shown
+    dlg.flip.setCurrentText("front-back")
+    assert drawn(95, 8) and not drawn(95, 62)
+    dlg.close()
+
+
+def test_export_preview_without_paste(window, tmp_path, app, monkeypatch):
+    src = _confirmed_top_panel(window, tmp_path, app)
+    target = tmp_path / "Saved.panel.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    window.save_project()
+    src.unlink()
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(target), ""))
+    window.open_project()
+    assert window.controller.read_only
+    dlg = _open_export_dialog(window, app, monkeypatch)
+    assert dlg.preview.paste is None and not dlg.show_paste.isEnabled()
+    assert dlg.preview.paste_note() == ""
+    dlg.close()
+
+    dlg = ExportIssDialog(make_project(), IssSettings(), tmp_path / "out.iss", pwb_id="B", paste={"top": [], "bottom": []})
+    assert not dlg.show_paste.isEnabled() and dlg.preview.paste_note() == " · no top paste layer"
+    dlg.grab()
 
 
 def test_export_dialog_settings_and_errors(app, tmp_path, boxes):

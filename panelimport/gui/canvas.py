@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 from panelimport.analysis.edits import status_text
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.gui import theme
-from panelimport.gui.geometry import LayerGeometry, build_layer_geometry, polygon_path, qtransform
+from panelimport.analysis.transforms import Transform
+from panelimport.gui.geometry import LayerGeometry, build_layer_geometry, paint_layer, polygon_path, qtransform
 
 LABEL_ZOOM = 6.0  # pixels per mm above which designator labels are drawn
 TINT = 0  # item data: (layer key, alpha override or None) of the colour an item is drawn in
@@ -50,19 +51,7 @@ class FeatureLayerItem(QGraphicsItem):
         return self.geo.rect
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget=None) -> None:
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(self.color)
-        if not self.geo.surfaces.isEmpty():
-            painter.drawPath(self.geo.surfaces)
-        if not self.geo.pads.isEmpty():
-            painter.drawPath(self.geo.pads)
-        for width, lines in self.geo.lines:
-            pen = QPen(self.color, max(width, 0.0), Qt.SolidLine, Qt.RoundCap)
-            if width <= 0:
-                pen.setCosmetic(True)
-                pen.setWidthF(1.0)
-            painter.setPen(pen)
-            painter.drawLines(lines)
+        paint_layer(painter, self.geo, self.color)
 
 
 class MarkerItem(QGraphicsItem):
@@ -272,6 +261,18 @@ class PanelCanvas(QGraphicsView):
             ff = draw.job.features(draw.step, draw.layer)
             self._geo_cache[key] = build_layer_geometry(ff) if ff is not None else None
         return self._geo_cache[key]
+
+    def feature_layers(self, role: str) -> list[tuple[LayerGeometry, Transform]]:
+        """What is drawn for one layer role: (geometry, step frame -> panel frame), one
+        entry per step instance that has features on it."""
+        out = []
+        for draw in self.analysis.layer_draws() if self.analysis else []:
+            if draw.role != role:
+                continue
+            geo = self._geometry(draw)
+            if geo is not None and geo.count:
+                out.append((geo, draw.transform))
+        return out
 
     def _build(self, a: PanelAnalysis) -> None:
         # Feature layers

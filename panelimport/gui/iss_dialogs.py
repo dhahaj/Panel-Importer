@@ -2,7 +2,7 @@
 
 Export shows the main ISS settings, the side being written (and the flip axis for a
 bottom-layer panel), a summary, the pre-write issues and a preview of the panel as the
-machine will see it; errors disable **Write**.  Compare reads two programs (ISS or
+machine will see it, over that side's paste; errors disable **Write**.  Compare reads two programs (ISS or
 ``.x21``) and shows the part-by-part table; nothing is edited.
 """
 
@@ -12,7 +12,17 @@ import copy
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF, QStandardItem, QStandardItemModel
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QPainter,
+    QPen,
+    QPixmap,
+    QPolygonF,
+    QStandardItem,
+    QStandardItemModel,
+    QTransform,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -36,7 +46,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from panelimport.analysis.transforms import Transform
 from panelimport.gui import theme
+from panelimport.gui.geometry import LayerGeometry, paint_layer, qtransform
 from panelimport.iss.checks import Prepared, prepare
 from panelimport.iss.compare import DEFAULT_TOLERANCE, Comparison, compare_programs, format_comparison, panel_geometry
 from panelimport.iss.mapping import panel_side
@@ -61,40 +73,93 @@ def _spin(value: float, lo: float, hi: float, suffix: str, decimals: int = 4) ->
 
 
 # -------------------------------------------------------------------- preview
+#: Paste layers by side ("top" / "bottom"): (geometry, step frame -> project panel frame).
+PasteLayers = dict[str, list[tuple[LayerGeometry, Transform]]]
+
+
 class ProgramPreview(QWidget):
     """The program's panel as the machine sees it: lower-left at 0,0, X along the
     conveyor, the FRONT (fixed) rail at the bottom.  Drawn from the program itself, in the
-    canvas's layer colours."""
+    canvas's layer colours, over the paste of the side being written (the side whose
+    fiducials the program uses), turned over and rotated like the panel."""
 
-    def __init__(self, colors: dict[str, QColor] | None = None, parent=None) -> None:
+    def __init__(self, colors: dict[str, QColor] | None = None, paste: PasteLayers | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setMinimumSize(320, 220)
         self.prepared: Prepared | None = None
         self.colors = {s.key: s.color for s in theme.LAYERS} | (colors or {})
+        # None when the export is not open (a saved project whose source is missing).
+        self.paste = paste
+        self.show_paste = True
+        self._paste_cache: tuple[tuple, QPixmap] | None = None
 
     def set_prepared(self, prepared: Prepared | None) -> None:
         self.prepared = prepared
         self.update()
 
-    def paintEvent(self, _event) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.fillRect(self.rect(), theme.CANVAS_BACKGROUND)
+    def set_show_paste(self, on: bool) -> None:
+        self.show_paste = on
+        self.update()
+
+    def paste_layers(self) -> list[tuple[LayerGeometry, Transform]]:
+        """The paste of the side being written."""
+        layout = self.prepared.layout if self.prepared else None
+        if layout is None or not self.paste:
+            return []
+        return self.paste.get(layout.machine.side, [])
+
+    def view(self) -> QTransform | None:
+        """Program panel frame (mm, Y up) -> widget pixels; None when there is no panel."""
         layout = self.prepared.layout if self.prepared else None
         if layout is None or layout.program.width <= 0 or layout.program.height <= 0:
-            p.setPen(QColor("#8b949e"))
-            p.drawText(self.rect(), Qt.AlignCenter, "No preview")
-            return
+            return None
         prog = layout.program
-        geom = panel_geometry(prog, self.prepared.settings.angle_direction)
         margin = 28.0
         scale = min((self.width() - 2 * margin) / prog.width, (self.height() - 2 * margin) / prog.height)
         ox = (self.width() - prog.width * scale) / 2
         oy = (self.height() + prog.height * scale) / 2
+        return QTransform(scale, 0, 0, -scale, ox, oy)
+
+    def _paint_paste(self, p: QPainter, view: QTransform) -> None:
+        """Draw the paste through the machine transform.  It is rendered once per size,
+        transform and colour: the other settings only change what is drawn over it."""
+        layers = self.paste_layers()
+        if not (self.show_paste and layers):
+            return
+        machine = self.prepared.layout.machine
+        color = self.colors[f"paste_{machine.side}"]
+        dpr = self.devicePixelRatioF()
+        key = (self.width(), self.height(), dpr, machine.transform, color.rgba())
+        if self._paste_cache is None or self._paste_cache[0] != key:
+            pixmap = QPixmap(round(self.width() * dpr), round(self.height() * dpr))
+            pixmap.setDevicePixelRatio(dpr)
+            pixmap.fill(Qt.transparent)
+            q = QPainter(pixmap)
+            q.setRenderHint(QPainter.Antialiasing)
+            for geo, t in layers:
+                q.setTransform(qtransform(machine.transform @ t) * view)
+                paint_layer(q, geo, color)
+            q.end()
+            self._paste_cache = (key, pixmap)
+        p.drawPixmap(0, 0, self._paste_cache[1])
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), theme.CANVAS_BACKGROUND)
+        view = self.view()
+        if view is None:
+            p.setPen(QColor("#8b949e"))
+            p.drawText(self.rect(), Qt.AlignCenter, "No preview")
+            return
+        layout = self.prepared.layout
+        prog = layout.program
+        geom = panel_geometry(prog, self.prepared.settings.angle_direction)
 
         def pt(x: float, y: float) -> QPointF:
-            return QPointF(ox + x * scale, oy - y * scale)
+            return view.map(QPointF(x, y))
 
+        self._paint_paste(p, view)
         p.setPen(QPen(self.colors["panel_outline"], 1.5))
         p.setBrush(Qt.NoBrush)
         p.drawRect(QRectF(pt(0, prog.height), pt(prog.width, 0)))
@@ -124,7 +189,17 @@ class ProgramPreview(QWidget):
         p.setPen(QPen(QColor("#8b949e"), 1))
         y = self.height() - 8
         p.drawText(QRectF(0, y - 14, self.width(), 14), Qt.AlignCenter, "FRONT rail · conveyor →")
-        p.drawText(QRectF(4, 2, self.width() - 8, 16), Qt.AlignLeft, layout.machine.describe())
+        p.drawText(QRectF(4, 2, self.width() - 8, 16), Qt.AlignLeft, layout.machine.describe() + self.paste_note())
+
+    def paste_note(self) -> str:
+        """What the header says about the paste (nothing when the export is not open)."""
+        layout = self.prepared.layout if self.prepared else None
+        if self.paste is None or layout is None:
+            return ""
+        side = layout.machine.side
+        if not self.paste_layers():
+            return f" · no {side} paste layer"
+        return f" · {side} paste" if self.show_paste else ""
 
 
 # -------------------------------------------------------------------- export
@@ -139,6 +214,7 @@ class ExportIssDialog(QDialog):
         confirmed: bool = True,
         qsettings: QSettings | None = None,
         colors: dict[str, QColor] | None = None,
+        paste: PasteLayers | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -197,9 +273,14 @@ class ExportIssDialog(QDialog):
         summary_box = QGroupBox("Summary")
         QVBoxLayout(summary_box).addWidget(self.summary)
 
-        self.preview = ProgramPreview(colors)
+        self.preview = ProgramPreview(colors, paste)
+        self.show_paste = QCheckBox("Show the paste")
+        self.show_paste.setChecked(True)
+        self.show_paste.toggled.connect(self.preview.set_show_paste)
         preview_box = QGroupBox("As the machine sees it")
-        QVBoxLayout(preview_box).addWidget(self.preview)
+        preview_layout = QVBoxLayout(preview_box)
+        preview_layout.addWidget(self.preview, 1)
+        preview_layout.addWidget(self.show_paste)
 
         # ---------------------------------------------------------- issues
         self.issues = QStandardItemModel(0, 4)
@@ -245,6 +326,16 @@ class ExportIssDialog(QDialog):
             w.valueChanged.connect(self._refresh)
         self.pwb_id.textChanged.connect(self._refresh)
         self._refresh()
+        # The side, and so the paste shown, follows the placements and never changes here.
+        side = self.prepared.layout.machine.side
+        self.show_paste.setText(f"Show the {side} paste")
+        self.show_paste.setEnabled(bool(self.preview.paste_layers()))
+        if paste is None:
+            self.show_paste.setToolTip("The ODB++ export is not open, so there is no paste to show")
+        elif not self.preview.paste_layers():
+            self.show_paste.setToolTip(f"The export has no {side} paste layer")
+        else:
+            self.show_paste.setToolTip(f"The {side} paste layer, turned over and rotated with the panel")
 
     # ---------------------------------------------------------------- state
     def settings(self) -> IssSettings:

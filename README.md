@@ -119,7 +119,11 @@ git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
   placements) with the flip axis for a bottom-layer panel, a summary, the checks, and a
   preview of the panel **as the machine will see it** (after the flip and rotation, P
   marked, FRONT rail at the bottom), so the flip axis can be checked against the real
-  panel. Every change re-runs the checks; errors disable **Write**. Writes `<name>.iss`
+  panel. The preview is drawn over the paste layer of the side being written (the side
+  whose fiducials the program uses), turned over and rotated with the panel, so the
+  centroids can be checked against their pads; *Show the top/bottom paste* hides it.
+  There is no paste when the export is missing. Every change re-runs the checks; errors
+  disable **Write**. Writes `<name>.iss`
   next to the project by default; *Save these settings as the default* stores them in
   the settings file (the pwbId stays per project).
 * **File → Compare programs…** — pick two ISS/`.x21` files and see the part-by-part

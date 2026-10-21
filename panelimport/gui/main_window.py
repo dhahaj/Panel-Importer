@@ -754,6 +754,10 @@ class MainWindow(QMainWindow):
         except (SerializationError, ValueError, OSError) as exc:
             QMessageBox.warning(self, "Export ISS", f"The ISS settings could not be read; using defaults.\n\n{exc}")
             iss_settings = IssSettings()
+        # The paste is read from the export; a saved project without its source has none.
+        paste = None
+        if not self.controller.read_only:
+            paste = {side: self.canvas.feature_layers(f"paste_{side}") for side in ("top", "bottom")}
         dlg = ExportIssDialog(
             project,
             iss_settings,
@@ -761,6 +765,7 @@ class MainWindow(QMainWindow):
             pwb_id=project_stem(project_path),
             qsettings=self.qsettings,
             colors=self.canvas.colors,
+            paste=paste,
             parent=self,
         )
         if dlg.exec() and dlg.written is not None:
