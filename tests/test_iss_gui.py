@@ -14,6 +14,7 @@ from PySide6.QtGui import QPainterPath  # noqa: E402
 from PySide6.QtWidgets import QFileDialog  # noqa: E402
 
 from panelimport.analysis.transforms import Transform  # noqa: E402
+from panelimport.app import dispose  # noqa: E402
 from panelimport.gui.geometry import LayerGeometry  # noqa: E402
 from panelimport.gui.iss_dialogs import CompareDialog, ExportIssDialog  # noqa: E402
 from panelimport.iss.reader import read_program  # noqa: E402
@@ -153,7 +154,7 @@ def test_export_preview_shows_the_paste_as_the_machine_sees_it(window, tmp_path,
     assert all(_paste_drawn_at(dlg, pads, centroids))
     dlg.show_paste.setChecked(False)
     assert not dlg.preview.show_paste and dlg.preview.paste_note() == ""
-    dlg.close()
+    dispose(dlg)
 
 
 def _square(x: float, y: float, size: float = 2.0) -> LayerGeometry:
@@ -181,7 +182,10 @@ def test_export_preview_turns_the_bottom_paste_over(app, tmp_path):
     assert drawn(5, 62) and not drawn(95, 62) and not drawn(50, 62)  # the top paste is not shown
     dlg.flip.setCurrentText("front-back")
     assert drawn(95, 8) and not drawn(95, 62)
+    assert dlg.preview._paste_cache is not None
     dlg.close()
+    assert dlg.preview._paste_cache is None  # a closed dialog keeps no image
+    dispose(dlg)
 
 
 def test_export_preview_without_paste(window, tmp_path, app, monkeypatch):
@@ -196,11 +200,12 @@ def test_export_preview_without_paste(window, tmp_path, app, monkeypatch):
     dlg = _open_export_dialog(window, app, monkeypatch)
     assert dlg.preview.paste is None and not dlg.show_paste.isEnabled()
     assert dlg.preview.paste_note() == ""
-    dlg.close()
+    dispose(dlg)
 
     dlg = ExportIssDialog(make_project(), IssSettings(), tmp_path / "out.iss", pwb_id="B", paste={"top": [], "bottom": []})
     assert not dlg.show_paste.isEnabled() and dlg.preview.paste_note() == " · no top paste layer"
     dlg.grab()
+    dispose(dlg)
 
 
 def test_export_dialog_settings_and_errors(app, tmp_path, boxes):
@@ -229,6 +234,8 @@ def test_export_dialog_settings_and_errors(app, tmp_path, boxes):
     assert not bad.write_button.isEnabled() and bad.issues.item(0, 1).text() == "no_fiducials"
     bad._write()
     assert not (tmp_path / "bad.iss").exists()
+    dispose(dlg)
+    dispose(bad)
 
 
 def test_export_dialog_bottom_side_and_remembered_settings(app, tmp_path, boxes, monkeypatch):
@@ -246,6 +253,7 @@ def test_export_dialog_bottom_side_and_remembered_settings(app, tmp_path, boxes,
     remembered = IssSettings.load(settings_file)
     assert remembered.bottom_flip == "front-back" and remembered.pwb_id == ""  # pwbId stays per project
     assert read_program(tmp_path / "b.iss").pwb_id == "ONLY-THIS-ONE"
+    dispose(dlg)
 
 
 def test_compare_dialog(app, tmp_path, boxes):
@@ -261,6 +269,7 @@ def test_compare_dialog(app, tmp_path, boxes):
     assert dlg.model.rowCount() == 66 * 15
     dlg.path_b.setText(str(tmp_path / "missing.x21"))
     assert not dlg.run() and boxes[-1][:2] == ("warning", "Compare programs")
+    dispose(dlg)
 
 
 def test_compare_action_opens_the_dialog(window, monkeypatch):

@@ -101,6 +101,10 @@ class ProgramPreview(QWidget):
         self.show_paste = on
         self.update()
 
+    def hideEvent(self, event) -> None:
+        self._paste_cache = None  # a closed dialog keeps no image
+        super().hideEvent(event)
+
     def paste_layers(self) -> list[tuple[LayerGeometry, Transform]]:
         """The paste of the side being written."""
         layout = self.prepared.layout if self.prepared else None
