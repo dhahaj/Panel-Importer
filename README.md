@@ -32,7 +32,9 @@ panelimport iss Panel.panel.json --set panel_rotation=90 --set clamp_offset_y=91
 panelimport iss-compare Generated.iss D:\ER_RevF8\Program.x21   # part-by-part diff
 ```
 
-`panelimport analyze` options: `--panel-step`, `--board-step`, `--first` (corner of
+`panelimport analyze` options: `--panel-step`, `--board-step` (default: every repeated
+design), `--as-is` (a panel without `STEP-REPEAT` placed as it is, see
+[How the panel is identified](#how-the-panel-is-identified)), `--first` (corner of
 circuit 1), `--order`, `--reference`, `--copy-suffix REGEX`, `--part-number-attribute`,
 `--panel-level FID1,FID2`, `--bom bom.csv`, `--components-csv FILE`, `--settings file.json`,
 `--json`, `-v`.
@@ -75,17 +77,27 @@ git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
 
 * **File → Import ODB++…** — choose the ODB++ folder, `.tgz` or `.zip`. The dialog lists
   the steps and layers with the detected panel step, board step and layer roles;
-  correct them if needed. The last location is remembered.
+  correct them if needed. When the panel repeats several steps with components, each is
+  marked **Board** (a design, see [Mixed designs](#mixed-designs)); keep one marked to
+  use only that design. The last location is remembered.
+* **Summary bar** — the panel summary, the detected **panel type** (grid, irregular
+  spacing, rotated copies, K designs, nested, single board, placed as it is) and the ISS
+  output it gets by default (one allocation per circuit, or flattened, with the reason).
+  For a panel without `STEP-REPEAT`, **Whole panel as one circuit** switches to the
+  as-is mode and back.
 * **Canvas** — middle-drag pans, the wheel zooms toward the cursor, `F` fits the panel,
   `M` measures (two clicks: ΔX, ΔY, distance; snaps to markers), `B` views from the
   bottom (display only). Layers toggle on the left. Hovering a centroid shows designator,
   part, package, layer, rotation (normalized and raw) and panel/circuit coordinates; the
-  status bar shows the cursor's panel and circuit-relative coordinates.
+  status bar shows the cursor's panel and circuit-relative coordinates. Each circuit is
+  labelled with its number (and its design on a mixed panel), and an L at its reference
+  point shows the board's +X (long arm) and +Y, so a rotated or mirrored copy is seen
+  at once.
 * **Layers** tab — tick a layer to show it. Double-click a layer (or select it and press
   **Colour…**, or right-click it) to pick its colour, transparency included; **Reset
   colours** restores the defaults. The ISS export preview uses the same colours.
-* **Circuits** tab — offsets, rotation, mirror, source and residual per circuit; choose
-  the corner of circuit 1, the numbering order and the reference point.
+* **Circuits** tab — design, offsets, rotation, mirror, source and residual per circuit;
+  choose the corner of circuit 1, the numbering order and the reference point.
 * **Components** tab — circuit 1's placements and the panel-level parts, sortable,
   filterable and searchable; pick the attribute that holds the part number. Selecting a
   row selects the part on the canvas and vice versa. Components can be edited here (see
@@ -115,13 +127,16 @@ git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
   panel and also works from a read-only project.
 * **File → Export ISS…** (`Ctrl+E`) — once the panel is confirmed (or from a saved
   project whose export is missing). The dialog shows the main ISS settings (pwbId, panel
-  rotation, clamp offset, angle direction and offset), the side being written (from the
+  rotation, clamp offset, angle direction and offset, **Circuits**: Auto, one allocation
+  per circuit or flattened into one circuit), the side being written (from the
   placements) with the flip axis for a bottom-layer panel, a summary, the checks, and a
   preview of the panel **as the machine will see it** (after the flip and rotation, P
   marked, FRONT rail at the bottom), so the flip axis can be checked against the real
   panel. The preview is drawn over the paste layer of the side being written (the side
   whose fiducials the program uses), turned over and rotated with the panel, so the
   centroids can be checked against their pads; *Show the top/bottom paste* hides it.
+  A flattened program has one circuit; the preview still draws and numbers every
+  circuit of the panel, so the copies can be checked.
   There is no paste when the export is missing. Every change re-runs the checks; errors
   disable **Write**. Writes `<name>.iss`
   next to the project by default; *Save these settings as the default* stores them in
@@ -198,9 +213,38 @@ one row per component, with the columns of the Components tab: `Designator`, `Le
 
 | Mode | When | Circuits come from |
 | --- | --- | --- |
-| `panel` | the panel step has `STEP-REPEAT` blocks | the expanded step-repeats (nested, multiple blocks, rotation, mirror, flip) |
+| `panel` | the panel step has `STEP-REPEAT` blocks | the expanded step-repeats (nested, multiple blocks, rotation, mirror, flip), one design or several |
 | `flattened` | no `STEP-REPEAT`, designators repeat | grouped designators, assigned by closed board outlines or by sorting (Y, then X), then a least-squares rigid fit per circuit |
 | `single-board` | no `STEP-REPEAT`, every designator once | the grid the user enters after confirming the mode (never chosen silently) |
+| `as-is` | no `STEP-REPEAT`, chosen by the user (**Whole panel as one circuit**, `--as-is`) | the whole panel step, one circuit |
+
+**Irregular panels.** A `STEP-REPEAT` panel need not be a grid: copies with uneven
+spacing, different offsets or turned 90°, 180° or 270° are each a circuit with its own
+offset and rotation. Nested step-repeats are expanded through every level. A mirrored
+copy places its parts on the other side of the board, which a one-sided program cannot
+do; it is shown and stops the ISS output (`mirrored_circuit`).
+
+### Mixed designs
+
+When the `STEP-REPEAT` blocks repeat **several steps with components** (say `MAIN` twice
+and `AUX` twice) and no board step is chosen, each step is a **design**: its copies are
+the circuits of that design, and each circuit places only its own design's parts.
+Placements are named `<design>/<designator>` (`MAIN/R12`, `AUX/R12`), each design has its
+own outline and reference point, and circuit `dx`/`dy` are measured from each circuit's
+own design reference. Orientation is checked per design against its first circuit; the
+`nonuniform_grid` warning and the BOM comparison (one BOM lists one design) are skipped.
+A component added by hand must name its design (`MAIN/C9`). Choosing a board step
+(import dialog or `--board-step`) uses that design alone, as before.
+
+### As-is
+
+A panel step without `STEP-REPEAT` is normally either regrouped into circuits
+(`flattened`) or set up as a single board. **Whole panel as one circuit** (`--as-is`)
+places it **as it is** instead: one circuit, the whole panel profile, every component
+where it is. Fiducials and parts confirmed as panel-level are panel parts; every
+fiducial is a panel fiducial. A designator that repeats is numbered `<designator>_<n>`,
+lower left first, row by row. Per-circuit bad marks are not available. The choice is
+ignored (`as_is_ignored`) for a panel with `STEP-REPEAT`.
 
 Conventions:
 
@@ -258,7 +302,10 @@ Also reported: ambiguous steps (`ambiguous_steps`, Error until chosen), a single
 export (`single_board`, Error until confirmed), units read by default
 (`units_assumed`), datum ≠ origin (`datum_origin_differ`), flipped steps
 (`step_flipped`), unrecognized fields (`unknown_field`), selected fiducials that
-disappeared (`fiducial_missing`) and a changed source on reopen (`source_changed`).
+disappeared (`fiducial_missing`) and a changed source on reopen (`source_changed`); for
+information, the designs of a mixed panel (`mixed_designs`), the skipped BOM comparison
+(`bom_designs`) and an as-is panel (`as_is`, `as_is_ignored` for a panel with
+`STEP-REPEAT`). Several board steps are designs, not an ambiguity.
 
 Tolerances, fiducial patterns (`FID*`), the copy-suffix regex, the part-number attribute,
 circuit 1's corner, the numbering order, the reference point, the panel origin and the
@@ -299,9 +346,9 @@ ISS values from the transformed geometry:
   untransformed panel has P at the reference point and `circuitLayoutOffset` = the
   outline's lower-left, exactly as the frame table in the brief says.
 * Each **allocation** is the change in a circuit's P (the same circuit-frame point placed
-  by that circuit); its angle is the circuit's rotation relative to circuit 1, as seen by
-  the machine (a mirror reverses it). Allocations are assumed to turn about the allocation
-  point; rotated allocations warn until that is confirmed in JaNets.
+  by that circuit). Its angle is always 0: no reference program has another, so a
+  circuit rotated relative to circuit 1 is written flattened (below), never as an
+  allocation angle.
 * Each **placement position** is the transformed position in circuit 1 minus P.
 * **Angles** follow the geometry: a part's angle is the direction of its X axis after the
   transform, so a left-right flip maps θ to 180° − θ, a front-back flip to −θ, and the
@@ -317,6 +364,22 @@ rail, not the board side).
 defaults (`bottom_flip = left-right`, `panel_rotation = auto`: a portrait panel turns 90°
 CCW so its long side runs along the conveyor) the transform is program (u, v) = (H − y,
 W − x), the one the ER pilot program used.
+
+**Circuit output.** Two encodings, both of them ones the reference programs use:
+
+* **One allocation per circuit** (`circuit_output = circuits`) — circuit 1's placements
+  once, plus an allocation per circuit. Grids and unevenly spaced unrotated copies are
+  written this way (`NONMATRIX`), byte for byte as before; per-circuit bad marks work.
+* **Flattened into one circuit** (`circuit_output = flatten`) — one allocation at 0,0
+  with P at the program panel's lower-left corner, holding every placement of every
+  circuit at its panel position. Designators carry the circuit number (`R12_2`, from
+  `MAIN/R12` on a mixed panel); angles go through each circuit's own rotation. One
+  circuit means no per-circuit bad-mark skipping (`flatten_no_bad_marks` warns).
+
+`circuit_output = auto` (the default) flattens a panel with several designs or any
+circuit rotated relative to circuit 1, and writes every other panel one allocation per
+circuit. An as-is panel is one circuit either way. Forcing a grid into `flatten` gives
+the same panel positions as its allocations expanded circuit by circuit (tested).
 
 ### What is written
 
@@ -358,6 +421,7 @@ for one run, and the report lists every value used.
 | `pwb_thickness`, `back_height` | 1.6, 37 | mm |
 | `clamp_offset_y` | `auto` | `auto` = program panel height / 2, or mm |
 | `circuit_layout` | `nonmatrix` | `matrix` for full uniform grids only |
+| `circuit_output` | `auto` | `auto` (flatten several designs or rotated circuits, else one allocation per circuit), `circuits` or `flatten` |
 | `angle_direction`, `angle_offset` | `ccw`, 0 | `cw` negates every angle; the offset is added to placement angles |
 | `header_completion` | `zero` | `zero` (CircuitCAM, issgen) or `total` (T3, JaNets) |
 | `model_component_stubs` | false | test switch: stub `model/componentData` |
@@ -371,10 +435,12 @@ Errors stop the write; warnings go in the report and the dialog.
 
 | Code | Check | Severity |
 | --- | --- | --- |
-| `project_invalid` | not a readable v1–v3 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
+| `project_invalid` | not a readable v1–v4 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
 | `no_fiducials`, `too_many_fiducials` | fewer than 2 / more than 3 fiducials on the placements' layer | Error |
 | `mirrored_circuit` | any circuit, or circuit 1 itself, mirrored | Error |
-| `rotated_circuit` | an allocation angle ≠ 0 (never tested in JaNets) | Warning |
+| `rotated_circuit` | one allocation per circuit forced with a rotated circuit (an allocation angle ≠ 0, which no reference program has) | Error |
+| `mixed_designs` | one allocation per circuit forced on a panel with several designs | Error |
+| `flatten_no_bad_marks` | written flattened: says why, and that per-circuit bad marks are not available | Warning |
 | `no_part_number` / `no_component_name` | part name used / no name at all | Warning / Error |
 | `component_name_chars` | a name with characters outside `A-Z a-z 0-9 - _ .` | Warning |
 | `duplicate_designator` | a designator twice in circuit 1 | Error |
@@ -387,7 +453,7 @@ Errors stop the write; warnings go in the report and the dialog.
 | `component_size_unknown` | components written with a size of 0 in some dimension, listed | Warning |
 | `component_size_differs` | placements of one component with different known sizes (and no edit choosing one) | Warning |
 | `component_size_old_project` | a project file older than version 3 has no sizes: all are written as 0 | Warning |
-| `matrix_layout` | a setting the project cannot satisfy | Error |
+| `matrix_layout` | `circuit_layout = matrix` on a panel that is not a full uniform unrotated grid, or flattened | Error |
 
 A saved project is confirmed by construction (Phase 1 saves only confirmed panels); the
 GUI exports only a confirmed panel.
@@ -430,8 +496,9 @@ saves, so a change is never guessed at.
 ## Project file
 
 `<name>.panel.json` is the direct serialization of `panelimport.model.panel.PanelProject`:
-`format`, `version`, `source` (path relative to the project, SHA-256, steps), `mode`,
-`panel` (outline, origin), `grid`, `numbering`, `circuit_reference`, `circuit_outline`,
+`format`, `version`, `source` (path relative to the project, SHA-256, steps), `mode`
+(`panel`, `flattened`, `single-board` or `as-is`), `panel` (outline, origin), `grid`,
+`numbering`, `circuit_reference`, `circuit_outline`, `designs` (mixed panels only),
 `circuits`, `part_number_attribute`, `placements` (with every attribute), `panel_parts`,
 `component_edits`, `fiducials`, `acknowledged_warnings`, `layer_roles`,
 `panel_level_designators`, `single_board`, `settings`. Loading is strict: unknown keys or
@@ -451,6 +518,9 @@ frames, leaving out fields at their default:
 ]
 ```
 
+Version 4 added the designs of a mixed panel: `designs` (name, the design's reference
+point `board_x`/`board_y` and outline) and `design` on each circuit and placement.
+A project with one design is still written as version 3, so older builds open it.
 Version 3 added the component sizes: `width`, `length` and `height` in `placements`,
 `panel_parts` and `component_edits`. Version 2 added `component_edits` and
 `panel_parts[].part_number` (and fills the panel parts' `package`). Older projects still
@@ -479,6 +549,15 @@ QT_QPA_PLATFORM=offscreen pytest -q
   check; the reference equations on every program in `tests/fixtures/iss/`; the `.x21`
   reader against issgen's program; and the ER golden comparison (`Panel.zip` +
   `Panel.panel.json`). Tests whose reference files are missing are skipped.
+* Non-grid panels: `tests/fixtures/golden/` holds the exact bytes of 59 programs written
+  for grid panels before that work (`test_golden_bytes.py`; they must not change).
+  `test_instance_math.py` checks copy transforms (rotation about the datum, mirror,
+  flip, nested and bottom-side composition) against hand-computed coordinates.
+  `tests/synthetic/panel_types.py` builds small ODB++ panels per type (irregular,
+  rotated, mixed designs, flat); `test_iss_flatten.py`, `test_mixed_designs.py` and
+  `test_as_is.py` compare their programs, top and bottom, with positions worked out by
+  hand, and check that a grid forced into `flatten` matches its allocations expanded
+  circuit by circuit.
 
 ## Code layout
 
@@ -527,7 +606,13 @@ path passes acceptance).
 - [ ] **Placement angle convention:** are Juki angles CCW like the project?
       `angle_direction` and `angle_offset` cover either answer.
 - [ ] **Rotated allocations:** do allocation angles turn about the allocation point, and
-      which way? Assumed about the point, CCW; `rotated_circuit` warns.
+      which way? Until a JaNets program shows it, rotated circuits are written flattened
+      and `rotated_circuit` stops a forced allocation angle.
+- [ ] **First flattened program:** open it in JaNets and check the panel view against the
+      panel before the first board run (one allocation with every circuit's parts, the
+      encoding of an as-is or single-circuit program).
+- [ ] **Mixed panels from Altium:** does the panel step also carry flattened copies of the
+      designs' parts? The cross-check handles it (names without the design prefix).
 - [ ] **Header completion counts:** do they change anything (`zero` vs `total`)?
 - [ ] **Component `0`:** where did the extra component in `panel3.x21` come from?
 - [ ] **Panel-level parts** besides fiducials: they are left out with a warning.
