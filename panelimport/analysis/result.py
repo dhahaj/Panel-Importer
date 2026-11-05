@@ -14,7 +14,7 @@ from panelimport import __version__
 from panelimport.analysis.checks import PasteResult
 from panelimport.analysis.fiducials import FiducialCandidate
 from panelimport.analysis.roles import StepDetection, detect_layer_roles
-from panelimport.analysis.transforms import GridInfo, Transform, ccw_from_odb, norm_angle
+from panelimport.analysis.transforms import GridInfo, Transform, angle_diff, ccw_from_odb, norm_angle
 from panelimport.io.bom import Bom
 from panelimport.io.odb.job import OdbJob
 from panelimport.model.issues import Issue, Severity
@@ -204,6 +204,7 @@ class PanelAnalysis:
     # A panel that repeats several designs: every one, circuit 1's first (board_step is then
     # None, and board_outline and reference_board are circuit 1's design's).
     designs: list[DesignInfo] = field(default_factory=list)
+    nested: bool = False  # circuits placed through a sub-panel step
     circuits: list[CircuitInfo] = field(default_factory=list)
     grid: GridInfo | None = None
     grid_source: str = ""
@@ -292,6 +293,30 @@ class PanelAnalysis:
         return text
 
     @property
+    def panel_type(self) -> str:
+        """What kind of panel this is, in a few words."""
+        if self.mode == "as-is":
+            return "flat panel, placed as it is"
+        if self.mode == "single-board":
+            return "single board"
+        if not self.circuits:
+            return "unknown"
+        tol = self.settings.tolerances
+        if self.designs:
+            kind = f"{len(self.designs)} designs"
+        elif any(angle_diff(c.rotation, 0.0) > tol.rotation for c in self.circuits):
+            kind = "irregular, rotated copies"
+        elif self.grid is not None and not self.grid.uniform and len(self.circuits) > 1:
+            kind = "irregular spacing"
+        else:
+            kind = "grid"
+        if self.mode == "flattened":
+            kind += ", copies found by designator"
+        if self.nested:
+            kind += ", nested"
+        return kind
+
+    @property
     def edit_frame(self) -> EditFrame:
         """The frame this analysis expresses component-edit coordinates in."""
         manual = self.mode == "single-board" and self.decisions.single_board is not None
@@ -321,6 +346,10 @@ class PanelAnalysis:
     def outline_of(self, design: str) -> list[tuple[float, float]]:
         d = self.design(design)
         return d.outline if d is not None else self.board_outline
+
+    def places(self, circuit: CircuitInfo, p: PlacementInfo) -> bool:
+        """Whether ``circuit`` places ``p`` (only its own design's parts, when there are several)."""
+        return not self.designs or p.design == circuit.design
 
     def circuits_of(self, p: PlacementInfo) -> list[CircuitInfo]:
         """The circuits that place ``p``: every circuit, or those of its design."""

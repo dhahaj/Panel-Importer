@@ -96,3 +96,17 @@ def test_single_board_dialog(app):
     assert [f.name for f in s.fiducials] == ["FID1", "FID2"]
     assert len(s.offsets_list()) == 6
     dispose(dlg)
+
+
+def test_import_dialog_marks_every_design(app, tmp_path):
+    from panelimport.gui.import_dialog import ImportDialog
+    from tests.synthetic.panel_types import mixed_job
+
+    src = mixed_job().write_folder(tmp_path / "mixed")
+    dlg = ImportDialog(settings=QSettings(str(tmp_path / "gui.ini"), QSettings.IniFormat))
+    assert dlg.load(str(src))
+    assert dlg.boards() == ["MAIN", "AUX"] and dlg.step_roles() == ("PANEL", None)
+    assert "repeats 2 designs (MAIN, AUX)" in dlg.note.text()
+    dict(dlg._step_combos)["AUX"].setCurrentText("—")
+    assert dlg.step_roles() == ("PANEL", "MAIN")
+    dispose(dlg)

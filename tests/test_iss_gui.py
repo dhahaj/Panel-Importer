@@ -277,3 +277,25 @@ def test_compare_action_opens_the_dialog(window, monkeypatch):
     monkeypatch.setattr(CompareDialog, "exec", lambda dlg: opened.append(dlg) or 0)
     window.act_compare.trigger()
     assert len(opened) == 1
+
+
+def test_export_dialog_circuits_override(app, tmp_path, boxes, monkeypatch):
+    """Auto flattens a panel with a turned circuit; one allocation per circuit is refused,
+    and the choice is never saved as the default."""
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setenv("PANELIMPORT_SETTINGS", str(settings_file))
+    project = make_project(circuits=[(0, 0, 0), (90.0, 55.0, 180.0)])
+    dlg = ExportIssDialog(project, IssSettings(), tmp_path / "flat.iss", pwb_id="B")
+    assert dlg.circuits.currentData() == "auto" and dlg.prepared.layout.output == "flatten"
+    assert "Output:     flatten, one circuit (circuit 2 rotated relative to circuit 1)" in dlg.summary.text()
+    assert [n for n, _outline in dlg.preview.circuit_outlines()] == [1, 2]  # both circuits drawn
+    dlg.circuits.setCurrentIndex(dlg.circuits.findData("circuits"))
+    assert not dlg.write_button.isEnabled()
+    assert "rotated_circuit" in [dlg.issues.item(r, 1).text() for r in range(dlg.issues.rowCount())]
+    dlg.circuits.setCurrentIndex(dlg.circuits.findData("flatten"))
+    assert dlg.write_button.isEnabled() and dlg.settings().circuit_output == "flatten"
+    dlg.remember.setChecked(True)
+    dlg._write()
+    assert IssSettings.load(settings_file).circuit_output == "auto"
+    assert read_program(tmp_path / "flat.iss").placements[0].designator == "R1_1"
+    dispose(dlg)

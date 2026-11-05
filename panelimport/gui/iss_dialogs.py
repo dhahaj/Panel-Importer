@@ -60,6 +60,11 @@ from panelimport.model.panel import PanelProject
 
 ROTATIONS = ["auto", "0", "90", "180", "270"]
 COMPONENT_SIZE_LABELS = {"body": "From the project (body and height)", "zero": "Zero for every component"}
+CIRCUIT_OUTPUT_LABELS = {
+    "auto": "Auto",
+    "circuits": "One allocation per circuit",
+    "flatten": "Flattened into one circuit",
+}
 PROGRAM_FILTER = "Placement programs (*.iss *.x21);;ISS programs (*.iss);;JaNets programs (*.x21);;All files (*)"
 
 
@@ -168,11 +173,11 @@ class ProgramPreview(QWidget):
         p.setBrush(Qt.NoBrush)
         p.drawRect(QRectF(pt(0, prog.height), pt(prog.width, 0)))
         circuit_pen = QPen(self.colors["circuit_outlines"], 1)
-        for c, number in zip(geom.circuits, layout.circuit_numbers):
+        for number, outline in self.circuit_outlines():
             p.setPen(circuit_pen)
-            p.drawPolygon(QPolygonF([pt(x, y) for x, y in c.outline]))
-            cx = sum(x for x, _ in c.outline) / 4
-            cy = sum(y for _, y in c.outline) / 4
+            p.drawPolygon(QPolygonF([pt(x, y) for x, y in outline]))
+            xs, ys = [x for x, _ in outline], [y for _, y in outline]
+            cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
             p.drawText(QRectF(pt(cx, cy) - QPointF(20, 8), pt(cx, cy) + QPointF(20, 8)), Qt.AlignCenter, str(number))
         dot = self.colors["centroids_bottom" if layout.machine.side == "bottom" else "centroids_top"]
         p.setPen(Qt.NoPen)
@@ -194,6 +199,19 @@ class ProgramPreview(QWidget):
         y = self.height() - 8
         p.drawText(QRectF(0, y - 14, self.width(), 14), Qt.AlignCenter, "FRONT rail · conveyor →")
         p.drawText(QRectF(4, 2, self.width() - 8, 16), Qt.AlignLeft, layout.machine.describe() + self.paste_note())
+
+    def circuit_outlines(self) -> list[tuple[int, list[tuple[float, float]]]]:
+        """(circuit number, outline) in the program frame: one per allocation, or when the
+        program is flattened into one circuit, the project's circuits it holds."""
+        layout = self.prepared.layout
+        if layout.output == "flatten":
+            project = self.prepared.project
+            return [
+                (c.index, [frame.apply(x, y) for x, y in project.design_outline(c.design)])
+                for c, frame in zip(project.circuits, layout.circuit_frames)
+            ]
+        geom = panel_geometry(layout.program, self.prepared.settings.angle_direction)
+        return [(number, c.outline) for c, number in zip(geom.circuits, layout.circuit_numbers)]
 
     def paste_note(self) -> str:
         """What the header says about the paste (nothing when the export is not open)."""
@@ -250,12 +268,21 @@ class ExportIssDialog(QDialog):
             self.sizes.addItem(label, key)
         self.sizes.setCurrentIndex(max(self.sizes.findData(settings.component_size), 0))
         self.sizes.setToolTip("componentSize of each component: its body size and height from the project, or 0")
+        self.circuits = QComboBox()
+        for key, label in CIRCUIT_OUTPUT_LABELS.items():
+            self.circuits.addItem(label, key)
+        self.circuits.setCurrentIndex(max(self.circuits.findData(settings.circuit_output), 0))
+        self.circuits.setToolTip(
+            "Auto writes one allocation per circuit, and flattens the panel into one circuit when a circuit is "
+            "rotated or the panel repeats several designs. The Summary says which and why."
+        )
         form.addRow("pwbId", self.pwb_id)
         form.addRow("Panel rotation (CCW)", self.rotation)
         form.addRow("Clamp offset Y", self.clamp)
         form.addRow("Angle direction", self.direction)
         form.addRow("Angle offset", self.offset)
         form.addRow("Component sizes", self.sizes)
+        form.addRow("Circuits", self.circuits)
 
         side_box = QGroupBox("Side")
         side_form = QFormLayout(side_box)
@@ -324,7 +351,7 @@ class ExportIssDialog(QDialog):
         layout.addWidget(self.buttons)
         self.resize(1000, 760)
 
-        for w in (self.rotation, self.direction, self.flip, self.sizes):
+        for w in (self.rotation, self.direction, self.flip, self.sizes, self.circuits):
             w.currentTextChanged.connect(self._refresh)
         for w in (self.clamp, self.offset, self.bottom_offset):
             w.valueChanged.connect(self._refresh)
@@ -353,6 +380,7 @@ class ExportIssDialog(QDialog):
         s.bottom_flip = self.flip.currentText()
         s.bottom_angle_offset = self.bottom_offset.value()
         s.component_size = self.sizes.currentData()
+        s.circuit_output = self.circuits.currentData()
         return s
 
     def _refresh(self, *_args) -> None:
@@ -396,6 +424,7 @@ class ExportIssDialog(QDialog):
         if self.remember.isChecked():
             defaults = self.settings()
             defaults.pwb_id = self.base.pwb_id  # the pwbId belongs to this project, not to every export
+            defaults.circuit_output = self.base.circuit_output  # and so does flattening it
             try:
                 defaults.save()
             except (OSError, ValueError) as exc:

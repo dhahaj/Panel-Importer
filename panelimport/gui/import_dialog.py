@@ -23,7 +23,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from panelimport.analysis.roles import LAYER_ROLES, ROLE_LABELS, detect_layer_roles, detect_steps, has_components
+from panelimport.analysis.roles import (
+    LAYER_ROLES,
+    ROLE_LABELS,
+    detect_layer_roles,
+    detect_steps,
+    has_components,
+    leaf_counts,
+)
 from panelimport.io.odb import OdbJob, OdbOpenError
 
 NONE = "—"
@@ -149,10 +156,13 @@ class ImportDialog(QDialog):
         det = detect_steps(job)
         roles, notes = detect_layer_roles(job.matrix)
         panel = det.panel_step
-        board = det.board_step
+        designs = [s for s in det.board_candidates if det.has_repeats and has_components(job, s)]
+        # Several designs are all boards (each circuit places its own), unless one was chosen.
+        boards = designs if len(designs) > 1 else [det.board_step] if det.board_step else []
         if decisions is not None:
             panel = decisions.panel_step or panel
-            board = decisions.board_step or board
+            if decisions.board_step:
+                boards = [decisions.board_step]
             for role, layer in decisions.layer_roles.items():
                 if layer:
                     roles[role] = layer
@@ -165,6 +175,11 @@ class ImportDialog(QDialog):
         msgs = []
         if det.ambiguous:
             msgs.append(f"⚠ {det.reason}. Check the Panel and Board roles below.")
+        if len(designs) > 1:
+            msgs.append(
+                f"The panel repeats {len(designs)} designs ({', '.join(designs)}). With every one marked Board, "
+                "each circuit places its own design's parts; keep Board on one step to place that design only."
+            )
         if not det.has_repeats:
             msgs.append(
                 "No STEP-REPEAT: the panel will be reconstructed from repeated designators, or treated as a "
@@ -193,7 +208,7 @@ class ImportDialog(QDialog):
             combo.addItems(STEP_ROLES)
             if panel and st.name.lower() == panel.lower():
                 combo.setCurrentText("Panel")
-            elif board and st.name.lower() == board.lower():
+            elif any(st.name.lower() == b.lower() for b in boards):
                 combo.setCurrentText("Board")
             combo.currentTextChanged.connect(lambda text, name=st.name: self._step_role_changed(name, text))
             self.steps.setCellWidget(r, 4, combo)
@@ -221,7 +236,8 @@ class ImportDialog(QDialog):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def _step_role_changed(self, name: str, text: str) -> None:
-        if self._updating or text == NONE:
+        # One panel; several boards are the designs of the panel.
+        if self._updating or text != "Panel":
             return
         self._updating = True
         for other, combo in self._step_combos:
@@ -242,10 +258,15 @@ class ImportDialog(QDialog):
         self._updating = False
 
     # ------------------------------------------------------------------ result
+    def boards(self) -> list[str]:
+        return [n for n, c in self._step_combos if c.currentText() == "Board"]
+
     def step_roles(self) -> tuple[str | None, str | None]:
+        """The panel step and the board step; the board is None when several are marked
+        (every design of the panel)."""
         panel = next((n for n, c in self._step_combos if c.currentText() == "Panel"), None)
-        board = next((n for n, c in self._step_combos if c.currentText() == "Board"), None)
-        return panel, board
+        boards = self.boards()
+        return panel, boards[0] if len(boards) == 1 else None
 
     def layer_roles(self) -> dict[str, str]:
         roles = {role: "" for role in LAYER_ROLES}
@@ -262,4 +283,14 @@ class ImportDialog(QDialog):
         if panel is None:
             QMessageBox.warning(self, "Choose the panel step", "Mark one step as the Panel.")
             return
+        boards = self.boards()
+        if len(boards) > 1:
+            designs = [s for s in leaf_counts(self.job, panel) if has_components(self.job, s)]
+            if {b.lower() for b in boards} != {d.lower() for d in designs}:
+                QMessageBox.warning(
+                    self,
+                    "Choose the board steps",
+                    "Mark one step as the Board, or every design the panel repeats: " + (", ".join(designs) or "none") + ".",
+                )
+                return
         self.accept()

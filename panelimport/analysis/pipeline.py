@@ -801,6 +801,7 @@ def _step_repeat_mode(
             c.design = ""
     _relative(a, circuits)
     a.grid_source = "step-repeat"
+    a.nested = any(len(i.path) > 1 for i in board_instances)
     a.placements = placements
 
     # Panel-level parts: the panel step's own components (minus flattened copies of the
