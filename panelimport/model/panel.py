@@ -278,6 +278,8 @@ class Decisions:
     bom_path: str | None = None
     component_edits: list[ComponentEdit] = field(default_factory=list)
     edit_frame: EditFrame | None = None  # None: the frame of the analysis itself
+    # A panel without STEP-REPEAT placed as it is: the whole panel step is one circuit.
+    as_is: bool = False
     confirmed: bool = False
 
 
@@ -287,7 +289,7 @@ class PanelProject:
     version: int = PROJECT_VERSION
     generator: str = ""
     source: SourceInfo = field(default_factory=SourceInfo)
-    mode: str = "panel"  # "panel" | "flattened" | "single-board"
+    mode: str = "panel"  # "panel" | "flattened" | "single-board" | "as-is"
     panel: PanelOutline = field(default_factory=PanelOutline)
     grid: Grid = field(default_factory=Grid)
     numbering: Numbering = field(default_factory=Numbering)

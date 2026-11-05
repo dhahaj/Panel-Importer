@@ -9,6 +9,8 @@ Modes:
   the repeated designators (``analysis.grouping``) and fitted transforms.
 * ``single-board`` — no STEP-REPEAT and every designator appears once: the user
   confirms and enters the circuit grid.  The mode is never chosen silently.
+* ``as-is`` — no STEP-REPEAT, chosen by the user (``Decisions.as_is``): the whole panel
+  step is one circuit and every component is placed where it is.
 
 Frames: the *board frame* is the board step's own coordinate system (for a flattened
 panel: circuit 1 where it sits in the panel step).  The *panel frame* is the panel
@@ -329,6 +331,15 @@ def analyze(
         instances, exp_issues = expand(job, panel_step, settings.step_repeat_anchor)
         issues.extend(exp_issues)
 
+    if instances and decisions.as_is:
+        issues.append(
+            warning(
+                "as_is_ignored",
+                f"As-is placement is for panels without STEP-REPEAT; '{panel_step}' has STEP-REPEAT blocks, "
+                "so its circuits come from them",
+                subject="as-is",
+            )
+        )
     if instances:
         designs = _design_steps(job, instances)
         mixed = decisions.board_step is None and len(designs) > 1
@@ -358,7 +369,10 @@ def analyze(
         groups = grouping.group_copies(copies)
         n = grouping.copy_count(groups)
         a.copy_count = n
-        if n <= 1:
+        if decisions.as_is:
+            a.mode = "as-is"
+            ctx = _as_is_mode(a, issues, panel_step, comps, to_panel, ref_kind)
+        elif n <= 1:
             a.mode = "single-board"
             a.suggested_suffix = grouping.suggest_suffix([c.designator for c in copies])
             ctx = _single_board_mode(a, issues, panel_step, comps, to_panel, ref_kind)
@@ -1116,6 +1130,64 @@ def _single_board_mode(
     return ctx
 
 
+# ---------------------------------------------------------------------- as-is
+def _as_is_mode(
+    a: PanelAnalysis,
+    issues: list[Issue],
+    panel_step: str,
+    comps: list[tuple[str, OdbComponent]],
+    to_panel: Transform,
+    ref_kind: str,
+) -> _ModeContext:
+    """The panel step as it is: one circuit, the whole panel, placing every component
+    where it is.  Fiducials and parts confirmed as panel-level are panel parts."""
+    job = a.job
+    a.board_step = panel_step
+    patterns = a.settings.fiducials.patterns
+    confirmed = set(a.decisions.panel_level)
+    placed, panel_level = [], []
+    for side, comp in comps:
+        pkg = _package(job, panel_step, comp)
+        fiducial = matches_pattern(comp.name, patterns) or (pkg is not None and matches_pattern(pkg.name, patterns))
+        (panel_level if fiducial or comp.name in confirmed else placed).append((side, comp))
+    a.panel_parts = [_panel_part(job, side, comp, to_panel, False, panel_step) for side, comp in panel_level]
+
+    prof = job.profile(panel_step)
+    if prof is not None:
+        a.board_outline = list(prof.outline)
+    else:
+        x0, y0, x1, y1 = _bbox([(c.x, c.y) for _s, c in comps])
+        a.board_outline = _rect(x0 - 1, y0 - 1, x1 + 1, y1 + 1)
+    _reference_point(a, issues, ref_kind, panel_step)
+    pts, center, size = _circuit_shape(to_panel, a.board_outline)
+    _relative(a, [CircuitInfo(1, to_panel, "as-is", outline=pts, center=center, size=size, label="panel")])
+    a.grid_source = "as-is"
+
+    # A repeated designator is numbered like a flattened program, lower left first.
+    a.placements = _placements(job, panel_step, placed)
+    counts = Counter(p.designator for p in a.placements)
+    numbered = []
+    for name in sorted(n for n, k in counts.items() if k > 1):
+        copies = [p for p in a.placements if p.designator == name]
+        copies.sort(key=lambda p: tuple(round(v, 3) for v in reversed(to_panel.apply(p.x, p.y))))
+        for k, p in enumerate(copies, start=1):
+            p.designator = f"{name}_{k}"
+        numbered.append(f"{name} ({len(copies)}×)")
+    removed = _removed(a.decisions, "board")
+    issues.extend(duplicate_designators([p.designator for p in a.placements if p.designator not in removed]))
+    issues.extend(_package_issues(job, panel_step, placed))
+    note = f"; repeated designators numbered <designator>_<n> from the lower left: {', '.join(numbered)}" if numbered else ""
+    issues.append(
+        info(
+            "as_is",
+            f"Placed as it is: the whole of '{panel_step}' is one circuit and every component is placed where it is{note}",
+            subject=panel_step,
+        )
+    )
+    a.instances = [StepInstanceInfo(job, panel_step, to_panel)]
+    return _ModeContext(panel_step, f"panel step '{panel_step}'")
+
+
 # ---------------------------------------------------------------------- common checks
 def _common_checks(a: PanelAnalysis, issues: list[Issue]) -> None:
     if not a.circuits:
@@ -1172,7 +1244,8 @@ def _bom_check(a: PanelAnalysis, issues: list[Issue]) -> None:
 # ---------------------------------------------------------------------- fiducials
 def _fiducials(a: PanelAnalysis, issues: list[Issue]) -> None:
     fs = a.settings.fiducials
-    regions = make_regions([(c.index, c.outline) for c in a.circuits])
+    # As-is, the one circuit is the whole panel: every fiducial on it is a panel fiducial.
+    regions = make_regions([(c.index, c.outline) for c in a.circuits]) if a.mode != "as-is" else []
     cands: list[FiducialCandidate] = []
 
     def add_classified(name, x, y, side, source, diameter=None, designator=None, note=""):
@@ -1256,6 +1329,7 @@ def decisions_from_project(project: PanelProject) -> Decisions:
         panel_level=list(project.panel_level_designators),
         single_board=project.single_board,
         component_edits=list(project.component_edits),
+        as_is=project.mode == "as-is",
         edit_frame=EditFrame(
             mode=project.mode,
             reference=project.circuit_reference.kind,

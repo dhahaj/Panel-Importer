@@ -20,9 +20,9 @@ def board(job: Job, name: str = "pcb", side: str = "top"):
     return b
 
 
-def fiducials(step, width: float, height: float, side: str = "top") -> None:
+def fiducials(step, width: float, height: float, side: str = "top", x0: float = 0.0, y0: float = 0.0) -> None:
     for i, (x, y) in enumerate([(2.5, 2.5), (width - 2.5, 2.5), (2.5, height - 2.5)], start=1):
-        step.component(f"FID{i}", "FID1MM", x, y, side=side, part="FIDUCIAL")
+        step.component(f"FID{i}", "FID1MM", x0 + x, y0 + y, side=side, part="FIDUCIAL")
 
 
 FIDS = ["FID1", "FID2", "FID3"]
@@ -91,4 +91,30 @@ def mixed_job(side: str = "top") -> Job:
     panel.step_repeat("aux", 150.0, 15.0, 0.0, 0.0, 1, 1)
     panel.step_repeat("aux", 150.0, 50.0, 0.0, 0.0, 1, 1, angle=90)
     fiducials(panel, *MIXED_SIZE, side=side)
+    return job
+
+
+# -------------------------------------------------------------------- flat (no STEP-REPEAT)
+FLAT_SIZE = (120.0, 60.0)
+# Panel-frame (x, y, CCW rotation): the panel profile starts at (−10, −5), so each part
+# sits at its ODB++ position + (10, 5).
+FLAT = {
+    "U1": (20.0, 15.0, 0.0),
+    "C1": (30.0, 7.0, 270.0),
+    "R1": (70.0, 40.0, 180.0),
+}
+# With ``duplicate``: a second U1, numbered after the first (lower-left first, row by row).
+FLAT_DUPLICATE = {"U1_1": (20.0, 15.0, 0.0), "U1_2": (80.0, 15.0, 270.0), "C1": FLAT["C1"], "R1": FLAT["R1"]}
+
+
+def flat_job(side: str = "top", duplicate: bool = False) -> Job:
+    """One step, the panel itself, with its parts placed directly in it."""
+    job = Job()
+    panel = job.step("panel", *FLAT_SIZE, x0=-10.0, y0=-5.0)
+    panel.component("U1", "SOIC8", 10.0, 10.0, rot=0, side=side, part="IC", props={"PART_NUMBER": "D-1"})
+    panel.component("C1", "C0603", 20.0, 2.0, rot=90, side=side, part="CAP", props={"PART_NUMBER": "D-2"})
+    panel.component("R1", "R0402", 60.0, 35.0, rot=180, side=side, part="RES", props={"PART_NUMBER": "D-3"})
+    if duplicate:
+        panel.component("U1", "SOIC8", 70.0, 10.0, rot=90, side=side, part="IC", props={"PART_NUMBER": "D-1"})
+    fiducials(panel, *FLAT_SIZE, side=side, x0=-10.0, y0=-5.0)
     return job

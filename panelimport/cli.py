@@ -97,6 +97,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         circuit_reference=args.reference,
         panel_level=[d.strip() for d in (args.panel_level or "").split(",") if d.strip()],
         bom_path=args.bom,
+        as_is=args.as_is,
     )
     session = Session(settings)
     analysis = session.open_source(args.path, decisions)
@@ -173,7 +174,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", help="ODB++ folder, .tgz or .zip")
     p.add_argument("--settings", help="settings JSON file (default: the user's settings)")
     p.add_argument("--panel-step", help="step to use as the panel")
-    p.add_argument("--board-step", help="step to use as the board")
+    p.add_argument("--board-step", help="step to use as the board (default: every repeated design)")
+    p.add_argument(
+        "--as-is", action="store_true", help="a panel without STEP-REPEAT: place it as it is, the whole panel one circuit"
+    )
     p.add_argument("--first", choices=CORNERS, help="corner of circuit 1")
     p.add_argument("--order", choices=ORDERS, help="circuit numbering order")
     p.add_argument("--reference", choices=REFERENCE_KINDS, help="circuit reference point")

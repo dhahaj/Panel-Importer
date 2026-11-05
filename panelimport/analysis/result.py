@@ -268,6 +268,8 @@ class PanelAnalysis:
     @property
     def summary(self) -> str:
         n = len(self.circuits)
+        if self.mode == "as-is" and n:
+            return "The whole panel as one circuit (no STEP-REPEAT), every component where it is"
         if self.mode == "single-board" and self.decisions.single_board is None:
             return "Single board (no STEP-REPEAT, every designator once): confirm single-board mode"
         if n == 0 or self.grid is None:
