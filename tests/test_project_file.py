@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from panelimport.model.panel import Acknowledgement, PanelProject
+from panelimport.model.panel import PROJECT_VERSION, Acknowledgement, PanelProject
 from panelimport.model.project_file import (
     ProjectFileError,
     load_project,
@@ -145,7 +145,7 @@ def test_strict_loading(tmp_path):
     with pytest.raises(ProjectFileError, match="unknown keys"):
         project_from_dict({**good, "surprise": 1})
     with pytest.raises(ProjectFileError, match="version"):
-        project_from_dict({**good, "version": 4})
+        project_from_dict({**good, "version": PROJECT_VERSION + 1})
     with pytest.raises(ProjectFileError, match="version"):
         project_from_dict({**good, "version": True})
     with pytest.raises(ProjectFileError, match="format"):

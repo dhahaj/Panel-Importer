@@ -110,12 +110,17 @@ def pose(x: float, y: float, rotation: float, bottom: bool) -> Transform:
 def apply_edits(
     a: PanelAnalysis,
     issues: list[Issue],
-    board_map: Transform | None,
+    board_map: Callable[[str], Transform | None],
     panel_map: Transform | None,
     package_of: PackageLookup,
 ) -> None:
-    """Convert the decisions' edits into ``a``'s frame and apply them to its parts."""
-    converted, stuck = convert(a.decisions.component_edits, board_map, panel_map)
+    """Convert the decisions' edits into ``a``'s frame and apply them to its parts.
+    ``board_map`` gives the circuit-relative map of each design ("" for the only one)."""
+    converted, stuck = [], []
+    for e in a.decisions.component_edits:
+        out, failed = convert([e], board_map(a.design_of(e.designator)), panel_map)
+        converted += out
+        stuck += failed
     edits = _unique(converted, issues)
     a.component_edits = sorted(edits, key=sort_key)
     if stuck:
@@ -132,7 +137,6 @@ def apply_edits(
         )
     if not edits:
         return
-    ref = a.reference_board
     targets: dict[str, dict[str, list[Part]]] = {"board": {}, "panel": {}}
     for p in a.placements:
         targets["board"].setdefault(p.designator, []).append(p)
@@ -140,8 +144,9 @@ def apply_edits(
         targets["panel"].setdefault(p.designator, []).append(p)
     added: dict[str, list[Part]] = {"board": [], "panel": []}
     for e in a.component_edits:
-        origin = ref if e.level == "board" else (0.0, 0.0)
-        problem = _invalid(e)
+        design = a.design_of(e.designator) if e.level == "board" else ""
+        origin = a.reference_of(design) if e.level == "board" else (0.0, 0.0)
+        problem = _invalid(e) or _no_design(a, e)
         if problem:
             issues.append(
                 error(
@@ -166,6 +171,8 @@ def apply_edits(
                 )
                 continue
             part = _added(e, origin, package_of)
+            if isinstance(part, PlacementInfo):
+                part.design = design
             added[e.level].append(part)
             targets[e.level][e.designator] = [part]
             continue
@@ -226,6 +233,15 @@ def _invalid(e: ComponentEdit) -> str:
     if e.added and e.removed:
         return "an added component cannot also be removed"
     return ""
+
+
+def _no_design(a: PanelAnalysis, e: ComponentEdit) -> str:
+    """On a panel of several designs, an added board-level part names its design."""
+    if not (a.designs and e.added and e.level == "board") or a.design_of(e.designator):
+        return ""
+    name = e.designator.strip()
+    named = " or ".join(f"{d.step}/{name}" for d in a.designs)
+    return f"the panel repeats several designs: name the design the part belongs to, e.g. {named}"
 
 
 def _override(p: Part, e: ComponentEdit, origin: tuple[float, float]) -> None:
@@ -322,14 +338,16 @@ def _added_size(e: ComponentEdit, pkg: Package | None) -> dict[str, float]:
 
 
 def _outline_checks(a: PanelAnalysis, issues: list[Issue]) -> None:
-    """Parts the user added or moved must lie on the board (or the panel)."""
-    board = Polygon(a.board_outline).buffer(1e-6) if len(a.board_outline) >= 3 else None
+    """Parts the user added or moved must lie on their board (or the panel)."""
     panel = Polygon(a.panel_outline).buffer(1e-6) if len(a.panel_outline) >= 3 else None
-    rx, ry = a.reference_board
-    c1 = a.circuits[0].transform if a.circuits else Transform()
     for p in a.placements:
         moved = p.state == "added" or "x" in p.export
+        outline = a.outline_of(p.design)
+        board = Polygon(outline).buffer(1e-6) if len(outline) >= 3 else None
         if moved and board is not None and not board.contains(Point(p.x, p.y)):
+            rx, ry = a.reference_of(p.design)
+            circuits = a.circuits_of(p)
+            c1 = circuits[0].transform if circuits else Transform()
             issues.append(
                 warning(
                     "outside_outline",
@@ -460,7 +478,7 @@ def shown_values(a: PanelAnalysis, part: Part, *, export: bool = False) -> dict[
     if export:
         values.update(part.export)
     if isinstance(part, PlacementInfo):
-        rx, ry = a.reference_board
+        rx, ry = a.reference_of(part.design)
         values["x"] = values["x"] - rx
         values["y"] = values["y"] - ry
     return values

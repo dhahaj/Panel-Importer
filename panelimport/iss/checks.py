@@ -184,6 +184,15 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
                     subject="layout",
                 )
             )
+        if project.designs:
+            issues.append(
+                error(
+                    "mixed_designs",
+                    f"The panel repeats {len(project.designs)} designs, but one allocation per circuit places the same "
+                    "parts in every circuit. Write the panel flattened (circuit_output auto or flatten)",
+                    subject="output",
+                )
+            )
 
     # ------------------------------------------------------------ component names
     for p in project.placements:
@@ -282,17 +291,22 @@ def _size_checks(project: PanelProject, layout: IssLayout) -> list[Issue]:
 
 def _outline_checks(project: PanelProject) -> list[Issue]:
     issues: list[Issue] = []
-    if len(project.circuit_outline) >= 3:
-        circuit = prep(Polygon(project.circuit_outline).buffer(EDGE_TOL))
-        for p in project.placements:
-            if not circuit.contains(Point(p.x, p.y)):
-                issues.append(
-                    warning("outside_circuit", f"Placement at ({p.x:.3f}, {p.y:.3f}) is outside the circuit outline", designator=p.designator)
-                )
+    outlines = {}  # design -> its prepared outline (each placement is relative to its own)
+    for p in project.placements:
+        if p.design not in outlines:
+            outline = project.design_outline(p.design)
+            outlines[p.design] = prep(Polygon(outline).buffer(EDGE_TOL)) if len(outline) >= 3 else None
+        circuit = outlines[p.design]
+        if circuit is not None and not circuit.contains(Point(p.x, p.y)):
+            issues.append(
+                warning("outside_circuit", f"Placement at ({p.x:.3f}, {p.y:.3f}) is outside the circuit outline", designator=p.designator)
+            )
     panel = prep(Polygon(panel_outline(project)).buffer(EDGE_TOL))
     frames = circuit_transforms(project)
     for p in project.placements:
         for c, tf in zip(project.circuits, frames):
+            if project.designs and c.design != p.design:
+                continue
             x, y = tf.apply(p.x, p.y)
             if not panel.contains(Point(x, y)):
                 issues.append(

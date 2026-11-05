@@ -5,6 +5,10 @@ Component sizes are the body's extent along the part's own X axis (``width``) an
 (``length``) at rotation 0, and its ``height``; 0 means unknown.
 Panel-level coordinates (outline, circuit reference, panel parts, fiducials) are in the
 panel frame, whose origin is described by :class:`PanelOrigin`.
+
+A panel that repeats several designs lists them in ``designs``: each circuit and
+placement names its design, placements are relative to their own design's reference
+point, and each circuit places only its own design's placements.
 """
 
 from __future__ import annotations
@@ -15,10 +19,13 @@ from typing import Literal
 from panelimport.settings import Settings
 
 PROJECT_FORMAT = "panel-project"
-PROJECT_VERSION = 3  # 2: component_edits, panel_parts[].part_number; 3: component sizes
-READABLE_VERSIONS = (1, 2, 3)
+PROJECT_VERSION = 4  # 2: component_edits, panel_parts[].part_number; 3: component sizes; 4: designs
+READABLE_VERSIONS = (1, 2, 3, 4)
 #: The first version whose placements, panel parts and edits carry component sizes.
 SIZES_VERSION = 3
+#: The first version that can hold several designs; a project of one design is written as
+#: the version before it, which older builds read.
+DESIGNS_VERSION = 4
 
 #: Why a component is not placed.
 REMOVAL_REASONS = ("through-hole", "not-populated", "mechanical", "other")
@@ -85,6 +92,7 @@ class Circuit:
     mirror: bool = False
     source: str = ""
     residual: float | None = None
+    design: str = ""  # its design (``PanelProject.designs``); "" when the panel has one
 
 
 @dataclass
@@ -102,6 +110,17 @@ class Placement:
     width: float = 0.0
     length: float = 0.0
     height: float = 0.0
+    design: str = ""  # as Circuit.design
+
+
+@dataclass
+class Design:
+    """One of the designs of a panel that repeats several."""
+
+    name: str = ""  # its ODB++ step
+    board_x: float = 0.0  # its reference point in its own frame
+    board_y: float = 0.0
+    outline: list[list[float]] = field(default_factory=list)  # relative to its reference point
 
 
 @dataclass
@@ -275,6 +294,9 @@ class PanelProject:
     circuit_reference: CircuitReference = field(default_factory=CircuitReference)
     # The board outline of one circuit, circuit-relative (like the placements).
     circuit_outline: list[list[float]] = field(default_factory=list)
+    # Empty when the panel repeats one design; else every design, circuit 1's first.  The
+    # circuit reference and outline above are then circuit 1's design's.
+    designs: list[Design] = field(default_factory=list)
     circuits: list[Circuit] = field(default_factory=list)
     part_number_attribute: str = ""
     placements: list[Placement] = field(default_factory=list)
@@ -287,3 +309,23 @@ class PanelProject:
     panel_level_designators: list[str] = field(default_factory=list)
     single_board: SingleBoardSetup | None = None
     settings: Settings = field(default_factory=Settings)
+
+    def placements_in(self, circuit: Circuit) -> list[Placement]:
+        """What ``circuit`` places: every placement, or those of its own design."""
+        if not self.designs:
+            return self.placements
+        return [p for p in self.placements if p.design == circuit.design]
+
+    def design_outline(self, design: str) -> list[list[float]]:
+        """The outline of ``design`` relative to its reference point (the circuit outline
+        when the panel has one design)."""
+        for d in self.designs:
+            if d.name == design:
+                return d.outline
+        return self.circuit_outline
+
+
+def base_designator(designator: str, design: str) -> str:
+    """A designator without the ``<design>/`` that names its design on a panel of several."""
+    prefix = f"{design}/"
+    return designator[len(prefix) :] if design and designator.startswith(prefix) else designator

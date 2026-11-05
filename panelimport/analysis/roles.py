@@ -157,12 +157,11 @@ def detect_steps(job: OdbJob) -> StepDetection:
         leaves = leaf_counts(job, panel)
         boards = [s for s in leaves if has_components(job, s)]
         board = max(boards, key=lambda s: leaves[s]) if boards else None
-        ambiguous = len(tops) > 1 or len(boards) > 1
+        # Several repeated steps with components are designs of one panel, not a doubt.
+        ambiguous = len(tops) > 1
         reason = ""
         if len(tops) > 1:
             reason = f"Several steps contain STEP-REPEAT blocks: {', '.join(tops)}"
-        elif len(boards) > 1:
-            reason = f"The panel repeats several steps with components: {', '.join(boards)}"
         elif not boards:
             reason = "No repeated step contains components"
         return StepDetection(

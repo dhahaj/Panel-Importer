@@ -188,12 +188,13 @@ class CircuitGeometry:
 
 def orientation_checks(circuits: list[CircuitGeometry], tol: Tolerances) -> list[Issue]:
     issues = []
+    base = circuits[0].index if circuits else 1  # circuit 1, or a design's first circuit
     for c in circuits[1:]:
         if c.rel_mirror:
             issues.append(
                 warning(
                     "circuit_mirrored",
-                    f"Circuit {c.index} is mirrored relative to circuit 1",
+                    f"Circuit {c.index} is mirrored relative to circuit {base}",
                     circuit=c.index,
                     location=c.center,
                 )
@@ -202,7 +203,7 @@ def orientation_checks(circuits: list[CircuitGeometry], tol: Tolerances) -> list
             issues.append(
                 warning(
                     "circuit_rotated",
-                    f"Circuit {c.index} is rotated {c.rel_rotation:.3f}° (CCW) relative to circuit 1",
+                    f"Circuit {c.index} is rotated {c.rel_rotation:.3f}° (CCW) relative to circuit {base}",
                     circuit=c.index,
                     location=c.center,
                     data={"rotation": c.rel_rotation},
@@ -215,8 +216,8 @@ def orientation_checks(circuits: list[CircuitGeometry], tol: Tolerances) -> list
             issues.append(
                 warning(
                     "circuit_mirrored",
-                    "Circuit 1 is mirrored on the panel; placements are in the board's own frame",
-                    circuit=1,
+                    f"Circuit {base} is mirrored on the panel; placements are in the board's own frame",
+                    circuit=base,
                     location=c1.center,
                 )
             )
@@ -224,8 +225,8 @@ def orientation_checks(circuits: list[CircuitGeometry], tol: Tolerances) -> list
             issues.append(
                 warning(
                     "circuit_rotated",
-                    f"Circuit 1 is rotated {rot:.3f}° (CCW) on the panel; placements are in the board's own frame",
-                    circuit=1,
+                    f"Circuit {base} is rotated {rot:.3f}° (CCW) on the panel; placements are in the board's own frame",
+                    circuit=base,
                     location=c1.center,
                     data={"rotation": rot},
                 )

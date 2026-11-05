@@ -49,3 +49,46 @@ def irregular_job(side: str = "top") -> Job:
     panel.step_repeat("pcb", 215.0, 20.0, 0.0, 0.0, 1, 1, angle=270)
     fiducials(panel, *IRREGULAR_SIZE, side=side)
     return job
+
+
+# -------------------------------------------------------------------- mixed designs
+MIXED_SIZE = (200.0, 80.0)
+AUX_DATUM = (1.0, 1.0)
+
+
+def aux_board(job: Job, name: str = "aux", side: str = "top"):
+    """A second, smaller design: U1 (3, 4) at 0° and R1 (8, 2) at 180° clockwise, (2, 3) and
+    (7, 1) from its datum (1, 1); its profile is 20 × 15 from (−2, −1).  It shares the
+    designator U1 with ``board``."""
+    b = job.step(name, 20.0, 15.0, x0=-2.0, y0=-1.0, datum=AUX_DATUM)
+    b.component("U1", "SOT23", 3.0, 4.0, rot=0, side=side, part="REG", props={"PART_NUMBER": "D-5"})
+    b.component("R1", "R0402", 8.0, 2.0, rot=180, side=side, part="RES", props={"PART_NUMBER": "D-3"})
+    return b
+
+
+# Flattened designator -> (x, y, CCW rotation).  Circuits are numbered from the lower left,
+# row by row: the main board at (15, 12) and (75, 12), then aux at (150, 15) turned 0° and
+# aux at (150, 50) turned 90° clockwise — (x, y) → (y, −x), rotation − 90°.
+MIXED = {
+    "U1_1": (18.0, 21.0, 0.0),
+    "C1_1": (28.0, 13.0, 270.0),
+    "U1_2": (78.0, 21.0, 0.0),
+    "C1_2": (88.0, 13.0, 270.0),
+    "U1_3": (152.0, 18.0, 0.0),
+    "R1_3": (157.0, 16.0, 180.0),
+    "U1_4": (153.0, 48.0, 270.0),
+    "R1_4": (151.0, 43.0, 90.0),
+}
+
+
+def mixed_job(side: str = "top") -> Job:
+    """Two copies of the main board and two of a smaller design, one of them turned."""
+    job = Job()
+    board(job, "main", side=side)
+    aux_board(job, side=side)
+    panel = job.step("panel", *MIXED_SIZE)
+    panel.step_repeat("main", 15.0, 12.0, 60.0, 0.0, 2, 1)
+    panel.step_repeat("aux", 150.0, 15.0, 0.0, 0.0, 1, 1)
+    panel.step_repeat("aux", 150.0, 50.0, 0.0, 0.0, 1, 1, angle=90)
+    fiducials(panel, *MIXED_SIZE, side=side)
+    return job

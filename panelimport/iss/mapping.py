@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 
 from panelimport.analysis.transforms import Transform, norm_angle
 from panelimport.iss.settings import IssSettings
-from panelimport.model.panel import SIZE_FIELDS, PanelProject
+from panelimport.model.panel import SIZE_FIELDS, PanelProject, base_designator
 
 #: Decimals JaNets stores (``.x21`` shows ``41.7830``); every written number is rounded to it.
 DECIMALS = 4
@@ -332,6 +332,13 @@ def output_mode(project: PanelProject, settings: IssSettings) -> tuple[str, str]
     """``("circuits" | "flatten", why)`` for the setting ``circuit_output``."""
     if settings.circuit_output != "auto":
         return settings.circuit_output, f"circuit_output={settings.circuit_output}"
+    if project.designs:
+        listed = "; ".join(
+            f"{d.name} in circuit{'s' if len(numbers) > 1 else ''} {', '.join(map(str, numbers))}"
+            for d in project.designs
+            for numbers in [[c.index for c in project.circuits if c.design == d.name]]
+        )
+        return "flatten", f"{len(project.designs)} designs: {listed}"
     rotated = rotated_circuits(project)
     if rotated:
         listed = ", ".join(map(str, rotated))
@@ -450,16 +457,16 @@ def _flatten_layout(
 ) -> IssLayout:
     """One allocation at P = the program panel's lower-left corner; every placement of
     every circuit at its panel position, named ``<designator>_<circuit>``.  The suffix
-    is all digits after the last ``_``, so the names cannot clash."""
+    is all digits after the last ``_``, so the names cannot clash.  On a panel of several
+    designs each circuit places its own design's parts, named without the design."""
     origin = (0.0, 0.0)
-    numbers = [c.index for c in project.circuits] or [1]
     placements: list[ProgramPlacement] = []
-    for number, frame in zip(numbers, frames):
-        for p in project.placements:
+    for c, frame in zip(project.circuits, frames):
+        for p in project.placements_in(c):
             x, y = frame.apply(p.x, p.y)
             placements.append(
                 ProgramPlacement(
-                    f"{p.designator}_{number}",
+                    f"{base_designator(p.designator, p.design)}_{c.index}",
                     component_name(p),
                     r4(x),
                     r4(y),
@@ -493,7 +500,7 @@ def _flatten_layout(
         origin=origin,
         origin_circuit=frames[0].inverse().apply(*origin),
         circuit_frames=frames,
-        circuit_numbers=numbers,
+        circuit_numbers=[c.index for c in project.circuits] or [1],
         other_layer_fiducials=other,
         skipped_panel_parts=[p.designator for p in project.panel_parts if not is_fiducial_part(project, p)],
         part_name_fallbacks=fallbacks,
