@@ -1,0 +1,2 @@
+# Golden ISS programs are compared byte for byte (UTF-8 BOM, CRLF): never convert them.
+tests/fixtures/golden/*.iss -text
