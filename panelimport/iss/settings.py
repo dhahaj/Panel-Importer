@@ -20,6 +20,7 @@ ISS_KEY = "iss"
 
 PANEL_ROTATIONS = ("auto", 0, 90, 180, 270)
 BOTTOM_FLIPS = ("left-right", "front-back")
+CIRCUIT_OUTPUTS = ("auto", "circuits", "flatten")
 CIRCUIT_LAYOUTS = ("nonmatrix", "matrix")
 ANGLE_DIRECTIONS = ("ccw", "cw")
 HEADER_COMPLETIONS = ("zero", "total")
@@ -41,6 +42,10 @@ class IssSettings:
     back_height: float = 37.0  # mm, as in every real program
     # "auto" = program panel height / 2, else mm.
     clamp_offset_y: str | float = "auto"
+    # "circuits" writes one allocation per circuit; "flatten" one allocation holding every
+    # placement at its panel position; "auto" flattens circuits rotated relative to circuit 1
+    # (no reference program has an allocation angle other than 0).
+    circuit_output: str = "auto"
     # "nonmatrix" lists every allocation; "matrix" writes divideNumber/pitch (uniform grids only).
     circuit_layout: str = "nonmatrix"
     # "cw" negates every angle written; project angles are CCW.
@@ -69,6 +74,7 @@ class IssSettings:
             problems.append(f"panel_rotation={self.panel_rotation!r} is not one of auto, 0, 90, 180, 270")
         for name, allowed in (
             ("bottom_flip", BOTTOM_FLIPS),
+            ("circuit_output", CIRCUIT_OUTPUTS),
             ("circuit_layout", CIRCUIT_LAYOUTS),
             ("angle_direction", ANGLE_DIRECTIONS),
             ("header_completion", HEADER_COMPLETIONS),

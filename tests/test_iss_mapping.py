@@ -48,11 +48,15 @@ def assert_round_trip(project, settings: IssSettings, flip, rotation, truth=None
     undo = layout.machine.transform.inverse()
     truth = truth or (lambda k, p: truth_position(project, k, p))
     assert len(layout.circuit_numbers) == len(project.circuits)
+    flat = layout.output == "flatten"
+    if flat:  # one allocation at the panel's lower-left holds every circuit's parts
+        assert [(c.x, c.y, c.angle) for c in program.circuits] == [(0, 0, 0)] and geom.origin == (0, 0)
+        assert len(geom.placements) == len(project.circuits) * len(project.placements)
     for prog_k, proj_k in enumerate(layout.circuit_numbers, start=1):
         for p in project.placements:
             x, y, a = truth(proj_k, p)
             mx, my = machine_point(x, y, w, h, flip, rotation)
-            g = got[(prog_k, p.designator)]
+            g = got[(1, f"{p.designator}_{proj_k}")] if flat else got[(prog_k, p.designator)]
             assert abs(g.x - mx) <= TOL and abs(g.y - my) <= TOL, (proj_k, p.designator, (g.x, g.y), (mx, my))
             assert angle_diff(g.angle, machine_angle(a, flip, rotation)) <= ANGLE_TOL, (proj_k, p.designator)
             ux, uy = undo.apply(g.x, g.y)  # undo the machine transform: back on the project's panel
@@ -126,15 +130,17 @@ def test_round_trip_bottom_portrait_auto(flip):
 
 
 @pytest.mark.parametrize("layer", ["top", "bottom"])
-@pytest.mark.parametrize("rotation", [90.0, 180.0])
-def test_round_trip_rotated_allocation(layer, rotation):
-    """A circuit rotated relative to circuit 1 turns about its allocation point."""
+@pytest.mark.parametrize("rotation", [90.0, 180.0, 270.0])
+@pytest.mark.parametrize("panel_rotation", [0, 90])
+def test_round_trip_rotated_circuit_flattened(layer, rotation, panel_rotation):
+    """A circuit rotated relative to circuit 1 is written flattened: every part where plain
+    geometry puts it, never as an allocation angle."""
     project = make_project(width=150, height=150, ref=(20.0, 20.0), circuits=[(0, 0, 0), (100.0, 100.0, rotation)], layer=layer)
     flip = "left-right" if layer == "bottom" else None
-    assert_round_trip(project, IssSettings(panel_rotation=0), flip, 0)
-    prepared, program = written(project, IssSettings(panel_rotation=0))
-    assert program.circuits[1].angle == (360.0 - rotation) % 360.0 if flip else rotation  # a mirror reverses turns
-    assert [i.circuit for i in prepared.issues if i.code == "rotated_circuit"] == [2]
+    assert_round_trip(project, IssSettings(panel_rotation=panel_rotation), flip, panel_rotation)
+    prepared, program = written(project, IssSettings(panel_rotation=panel_rotation))
+    assert prepared.layout.output == "flatten" and [c.angle for c in program.circuits] == [0.0]
+    assert not any(i.code == "rotated_circuit" for i in prepared.issues)
 
 
 def test_round_trip_matrix_layout_rebases_p():

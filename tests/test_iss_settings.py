@@ -86,4 +86,4 @@ def test_overrides():
 
 def test_describe_lists_every_setting():
     keys = [k for k, _v in IssSettings().describe()]
-    assert keys[0] == "pwb_id" and "traceability" in keys and len(keys) == 18
+    assert keys[0] == "pwb_id" and "traceability" in keys and len(keys) == 19

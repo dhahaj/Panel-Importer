@@ -28,6 +28,13 @@ a left-right flip maps θ to 180° − θ and a front-back flip maps θ to −θ
 
 Component sizes are in the part's own frame (``witdh`` along its X axis at angle 0), so
 the panel's flip and rotation do not change them; an angle offset of ±90° does.
+
+**Output.** ``circuits`` writes one allocation per circuit, the encoding every reference
+program uses (allocation angle 0).  ``flatten`` writes one allocation at P holding every
+placement of every circuit at its panel position, P at the program panel's lower-left
+corner: the only encoding used for circuits rotated relative to circuit 1, because no
+reference program has an allocation angle other than 0.  ``circuit_output = auto``
+flattens exactly then.  Flattened designators carry the circuit number (``R12_2``).
 """
 
 from __future__ import annotations
@@ -280,6 +287,10 @@ class IssLayout:
     size_conflicts: list[SizeConflict] = field(default_factory=list)
     # Uniform grid for MATRIX output: (nx, ny, pitch_x, pitch_y), or None.
     matrix: tuple[int, int, float, float] | None = None
+    # "circuits" (one allocation per circuit) or "flatten" (one allocation, every
+    # placement of every circuit; circuit_numbers then lists the circuits it holds).
+    output: str = "circuits"
+    output_reason: str = ""
 
 
 _PLAIN_NAME = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
@@ -312,15 +323,45 @@ def is_fiducial_part(project: PanelProject, part, tol: float = 0.05) -> bool:
     return any(math.hypot(part.x - f.x, part.y - f.y) <= tol for f in project.fiducials)
 
 
+def rotated_circuits(project: PanelProject) -> list[int]:
+    """Circuits turned relative to circuit 1 (as an allocation angle would show)."""
+    return [c.index for c in project.circuits if angle4(c.rotation)]
+
+
+def output_mode(project: PanelProject, settings: IssSettings) -> tuple[str, str]:
+    """``("circuits" | "flatten", why)`` for the setting ``circuit_output``."""
+    if settings.circuit_output != "auto":
+        return settings.circuit_output, f"circuit_output={settings.circuit_output}"
+    rotated = rotated_circuits(project)
+    if rotated:
+        listed = ", ".join(map(str, rotated))
+        return "flatten", f"circuit{'s' if len(rotated) > 1 else ''} {listed} rotated relative to circuit 1"
+    return "circuits", "no circuit is rotated relative to circuit 1"
+
+
+def program_angle(frame: Transform, theta: float, machine: MachineTransform, settings: IssSettings) -> float:
+    """The written angle of a part rotated ``theta`` in a circuit placed by ``frame``."""
+    angle = direction_angle(frame, theta)
+    if machine.side == "bottom":
+        angle += settings.bottom_angle_offset
+    if settings.angle_direction == "cw":
+        angle = -angle
+    angle += settings.angle_offset
+    return angle4(angle)
+
+
 def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "") -> IssLayout:
     """Map a project into the ISS frame.  Never raises for content problems: the checks
     report them, and the layout is built from whatever can be mapped."""
+    output, reason = output_mode(project, settings)
     side = panel_side(project)
     machine = machine_transform(project, settings, side)
     m = machine.transform
     frames = [m @ c for c in circuit_transforms(project)]
     if not frames:
         frames = [m @ Transform.translation(project.circuit_reference.x, project.circuit_reference.y)]
+    if output == "flatten":
+        return _flatten_layout(project, settings, pwb_id, machine, frames, reason)
     g1 = frames[0]
     l1 = linear(g1)
 
@@ -344,47 +385,20 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
     circuits[0] = ProgramCircuit(1, 0.0, 0.0, circuits[0].angle)
 
     placements: list[ProgramPlacement] = []
-    components: dict[str, ProgramComponent] = {}
-    members: dict[str, list] = {}  # component name -> its placements
-    fallbacks = []
     for p in project.placements:
-        name = component_name(p)
-        if not (p.part_number or "").strip() and name:
-            fallbacks.append(p.designator)
         x, y = g1.apply(p.x, p.y)
-        angle = direction_angle(g1, p.rotation)
-        if machine.side == "bottom":
-            angle += settings.bottom_angle_offset
-        if settings.angle_direction == "cw":
-            angle = -angle
-        angle += settings.angle_offset
         placements.append(
-            ProgramPlacement(p.designator, name, r4(x - origin[0]), r4(y - origin[1]), angle4(angle), layer=p.layer)
+            ProgramPlacement(
+                p.designator,
+                component_name(p),
+                r4(x - origin[0]),
+                r4(y - origin[1]),
+                program_angle(g1, p.rotation, machine, settings),
+                layer=p.layer,
+            )
         )
-        if name and name not in components:
-            components[name] = ProgramComponent(name, component_comment(p, settings.comment_attributes))
-        if name:
-            members.setdefault(name, []).append(p)
-    conflicts = []
-    if settings.component_size == "body":
-        edited = size_edits(project)
-        offset = settings.angle_offset + (settings.bottom_angle_offset if machine.side == "bottom" else 0.0)
-        for name, comp in components.items():
-            size, conflict = component_size(name, members[name], edited)
-            if quarter_turned(offset):
-                size = (size[1], size[0], size[2])
-            comp.width, comp.length, comp.height = size
-            if conflict is not None:
-                conflicts.append(conflict)
-
-    fiducials = []
-    other = []
-    for f in project.fiducials:
-        if f.layer != machine.side:
-            other.append(f.name)
-            continue
-        x, y = m.apply(f.x, f.y)
-        fiducials.append(ProgramFiducial(mark_name(f.name, len(fiducials) + 1), r4(x - origin[0]), r4(y - origin[1])))
+    components, conflicts, fallbacks = _components(project, settings, machine)
+    fiducials, other = _marks(project, machine, origin)
 
     width, height = r4(machine.width), r4(machine.height)
     clamp = height / 2 if settings.clamp_offset_y == "auto" else float(settings.clamp_offset_y)
@@ -401,7 +415,7 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         circuit_layout_offset=(r4(lx - origin[0]), r4(ly - origin[1])),
         clamp_offset=r4(clamp),
         placements=placements,
-        components=list(components.values()),
+        components=components,
         fiducials=fiducials,
     )
     layout = IssLayout(
@@ -415,6 +429,7 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         skipped_panel_parts=[p.designator for p in project.panel_parts if not is_fiducial_part(project, p)],
         part_name_fallbacks=fallbacks,
         size_conflicts=conflicts,
+        output_reason=reason,
     )
     grid = uniform_grid(circuits)
     if grid is not None:
@@ -423,6 +438,114 @@ def build_layout(project: PanelProject, settings: IssSettings, pwb_id: str = "")
         if settings.circuit_layout == "matrix":
             _rebase_matrix(layout, x0, y0)
     return layout
+
+
+def _flatten_layout(
+    project: PanelProject,
+    settings: IssSettings,
+    pwb_id: str,
+    machine: MachineTransform,
+    frames: list[Transform],
+    reason: str,
+) -> IssLayout:
+    """One allocation at P = the program panel's lower-left corner; every placement of
+    every circuit at its panel position, named ``<designator>_<circuit>``.  The suffix
+    is all digits after the last ``_``, so the names cannot clash."""
+    origin = (0.0, 0.0)
+    numbers = [c.index for c in project.circuits] or [1]
+    placements: list[ProgramPlacement] = []
+    for number, frame in zip(numbers, frames):
+        for p in project.placements:
+            x, y = frame.apply(p.x, p.y)
+            placements.append(
+                ProgramPlacement(
+                    f"{p.designator}_{number}",
+                    component_name(p),
+                    r4(x),
+                    r4(y),
+                    program_angle(frame, p.rotation, machine, settings),
+                    layer=p.layer,
+                )
+            )
+    components, conflicts, fallbacks = _components(project, settings, machine)
+    fiducials, other = _marks(project, machine, origin)
+    width, height = r4(machine.width), r4(machine.height)
+    clamp = height / 2 if settings.clamp_offset_y == "auto" else float(settings.clamp_offset_y)
+    program = Program(
+        kind="generated",
+        pwb_id=pwb_id,
+        width=width,
+        height=height,
+        circuit_width=width,
+        circuit_height=height,
+        circuit_layout="NONMATRIX",
+        circuits=[ProgramCircuit(1, 0.0, 0.0, 0.0)],
+        pwb_layout_offset=(width, 0.0),
+        circuit_layout_offset=(0.0, 0.0),
+        clamp_offset=r4(clamp),
+        placements=placements,
+        components=components,
+        fiducials=fiducials,
+    )
+    return IssLayout(
+        program=program,
+        machine=machine,
+        origin=origin,
+        origin_circuit=frames[0].inverse().apply(*origin),
+        circuit_frames=frames,
+        circuit_numbers=numbers,
+        other_layer_fiducials=other,
+        skipped_panel_parts=[p.designator for p in project.panel_parts if not is_fiducial_part(project, p)],
+        part_name_fallbacks=fallbacks,
+        size_conflicts=conflicts,
+        output="flatten",
+        output_reason=reason,
+    )
+
+
+def _components(
+    project: PanelProject, settings: IssSettings, machine: MachineTransform
+) -> tuple[list[ProgramComponent], list[SizeConflict], list[str]]:
+    """One record per component name in first-use order, its size, and the placements
+    whose name fell back to the part name."""
+    components: dict[str, ProgramComponent] = {}
+    members: dict[str, list] = {}  # component name -> its placements
+    fallbacks = []
+    for p in project.placements:
+        name = component_name(p)
+        if not (p.part_number or "").strip() and name:
+            fallbacks.append(p.designator)
+        if name and name not in components:
+            components[name] = ProgramComponent(name, component_comment(p, settings.comment_attributes))
+        if name:
+            members.setdefault(name, []).append(p)
+    conflicts = []
+    if settings.component_size == "body":
+        edited = size_edits(project)
+        offset = settings.angle_offset + (settings.bottom_angle_offset if machine.side == "bottom" else 0.0)
+        for name, comp in components.items():
+            size, conflict = component_size(name, members[name], edited)
+            if quarter_turned(offset):
+                size = (size[1], size[0], size[2])
+            comp.width, comp.length, comp.height = size
+            if conflict is not None:
+                conflicts.append(conflict)
+    return list(components.values()), conflicts, fallbacks
+
+
+def _marks(
+    project: PanelProject, machine: MachineTransform, origin: tuple[float, float]
+) -> tuple[list[ProgramFiducial], list[str]]:
+    """The fiducials on the side being written, relative to P, and the names of the others."""
+    fiducials = []
+    other = []
+    for f in project.fiducials:
+        if f.layer != machine.side:
+            other.append(f.name)
+            continue
+        x, y = machine.point(f.x, f.y)
+        fiducials.append(ProgramFiducial(mark_name(f.name, len(fiducials) + 1), r4(x - origin[0]), r4(y - origin[1])))
+    return fiducials, other
 
 
 def size_edits(project: PanelProject) -> dict[str, set[str]]:

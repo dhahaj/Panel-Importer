@@ -19,9 +19,9 @@ from panelimport.iss.settings import IssSettings
 from panelimport.model.panel import Decisions
 from panelimport.settings import Settings
 from tests.synthetic.odbgen import Job
+from tests.synthetic.panel_types import DATUM, IRREGULAR, irregular_job
 from tests.synthetic.projects import make_project
 
-DATUM = (4.0, 3.0)
 POINT = (10.0, 5.0)  # (6, 2) from the datum
 
 
@@ -82,37 +82,16 @@ def test_nested_copies_compose(tmp_path):
 
 
 # -------------------------------------------------------------------- Phase 1, irregular copies
-def _irregular_job() -> Job:
-    """One board, four copies at uneven offsets and 0/90/180/270° (clockwise, ODB++)."""
-    job = Job()
-    b = job.step("pcb", 50.0, 36.5, x0=-8.0, y0=-6.0, datum=DATUM)
-    b.component("U1", "SOIC8", 7.0, 12.0, rot=0, part="IC")  # (3, 9) from the datum
-    b.component("C1", "C0603", 17.0, 4.0, rot=90, part="CAP")  # (13, 1) from the datum
-    panel = job.step("panel", 230.0, 70.0)
-    panel.step_repeat("pcb", 15.0, 12.0, 0.0, 0.0, 1, 1)
-    panel.step_repeat("pcb", 75.0, 50.0, 0.0, 0.0, 1, 1, angle=90)
-    panel.step_repeat("pcb", 160.0, 45.0, 0.0, 0.0, 1, 1, angle=180)
-    panel.step_repeat("pcb", 215.0, 20.0, 0.0, 0.0, 1, 1, angle=270)
-    for i, (x, y) in enumerate([(2.5, 2.5), (227.5, 2.5), (2.5, 67.5)], start=1):
-        panel.component(f"FID{i}", "FID1MM", x, y, part="FIDUCIAL")
-    return job
-
-
-# (x, y, CCW rotation) per copy, by hand: (3, 9) and (13, 1) turned clockwise, plus X, Y.
-IRREGULAR_U1 = {(18.0, 21.0, 0.0), (84.0, 47.0, 270.0), (157.0, 36.0, 180.0), (206.0, 23.0, 90.0)}
-IRREGULAR_C1 = {(28.0, 13.0, 270.0), (76.0, 37.0, 180.0), (147.0, 44.0, 90.0), (214.0, 33.0, 0.0)}
-
-
 def test_irregular_rotated_copies_land_where_computed_by_hand(tmp_path):
-    a = analyze(OdbJob(_irregular_job().write_folder(tmp_path)), Settings(), Decisions())
+    a = analyze(OdbJob(irregular_job().write_folder(tmp_path)), Settings(), Decisions())
     assert a.mode == "panel" and len(a.circuits) == 4
     parts = {p.designator: p for p in a.placements}
 
     def where(name):
         return {tuple(round(v, 6) for v in a.circuit_position(parts[name], c)) for c in a.circuits}
 
-    assert where("U1") == IRREGULAR_U1
-    assert where("C1") == IRREGULAR_C1
+    assert where("U1") == IRREGULAR["U1"]
+    assert where("C1") == IRREGULAR["C1"]
     assert sorted(round(c.rotation) for c in a.circuits) == [0, 90, 180, 270]
     assert not any(c.mirror for c in a.circuits)
 

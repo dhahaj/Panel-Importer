@@ -143,29 +143,47 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
 
     # ------------------------------------------------------------ circuits
     ref = project.circuit_reference
+    other_side = "its parts face the other side of the panel, and a program places one side only"
     if ref.mirror:
-        issues.append(error("mirrored_circuit", "Circuit 1 is mirrored on the panel", circuit=1, subject="circuit"))
+        issues.append(error("mirrored_circuit", f"Circuit 1 is mirrored on the panel: {other_side}", circuit=1, subject="circuit"))
     for c in project.circuits:
         if c.mirror:
-            issues.append(error("mirrored_circuit", f"Circuit {c.index} is mirrored relative to circuit 1", circuit=c.index))
-    for number, c in zip(layout.circuit_numbers, layout.program.circuits):
-        if c.angle:
             issues.append(
-                warning(
-                    "rotated_circuit",
-                    f"Circuit {number} is written with allocation angle {c.angle:g}°; rotated allocations have never "
-                    "been tested in JaNets",
-                    circuit=number,
-                )
+                error("mirrored_circuit", f"Circuit {c.index} is mirrored relative to circuit 1: {other_side}", circuit=c.index)
             )
-    if settings.circuit_layout == "matrix" and layout.matrix is None:
+    if layout.output == "flatten":
+        n = len(layout.program.placements)
         issues.append(
-            error(
-                "matrix_layout",
-                "circuit_layout=matrix needs a full, uniform, unrotated grid of circuits; use nonmatrix",
-                subject="layout",
+            warning(
+                "flatten_no_bad_marks",
+                f"Written as one circuit ({layout.output_reason}): {n} placements from {len(layout.circuit_numbers)} "
+                "circuits, named <designator>_<circuit>. Per-circuit bad-mark skipping is not available",
+                subject="output",
             )
         )
+        if settings.circuit_layout == "matrix":
+            issues.append(
+                error("matrix_layout", "circuit_layout=matrix needs one allocation per circuit, not flatten", subject="layout")
+            )
+    else:
+        for number, c in zip(layout.circuit_numbers, layout.program.circuits):
+            if c.angle:
+                issues.append(
+                    error(
+                        "rotated_circuit",
+                        f"Circuit {number} would be written with allocation angle {c.angle:g}°, which no reference "
+                        "program proves. Write the panel flattened (circuit_output auto or flatten)",
+                        circuit=number,
+                    )
+                )
+        if settings.circuit_layout == "matrix" and layout.matrix is None:
+            issues.append(
+                error(
+                    "matrix_layout",
+                    "circuit_layout=matrix needs a full, uniform, unrotated grid of circuits; use nonmatrix",
+                    subject="layout",
+                )
+            )
 
     # ------------------------------------------------------------ component names
     for p in project.placements:
