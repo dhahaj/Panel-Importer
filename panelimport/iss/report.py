@@ -20,14 +20,19 @@ def summary_lines(prepared: Prepared) -> list[str]:
     m = layout.machine
     sides = Counter(p.layer for p in project.placements)
     side_text = ", ".join(f"{k} {v}" for k, v in sorted(sides.items())) or "none"
+    flat = layout.output == "flatten"
+    where = "the panel's lower-left corner" if flat else f"circuit {layout.circuit_numbers[0]}"
     lines = [
         f"Side:       {m.describe()} (placements: {side_text})",
         f"Panel:      {fmt(prog.width)} × {fmt(prog.height)} mm as the machine sees it; clamp offset {fmt(prog.clamp_offset or 0)}",
-        f"Origin P:   ({layout.origin[0]:.4f}, {layout.origin[1]:.4f}) on circuit {layout.circuit_numbers[0]}; "
+        f"Output:     {'flatten, one circuit' if flat else 'one allocation per circuit'} ({layout.output_reason})",
+        f"Origin P:   ({layout.origin[0]:.4f}, {layout.origin[1]:.4f}) on {where}; "
         f"pwbLayoutOffset ({fmt(prog.pwb_layout_offset[0])}, {fmt(prog.pwb_layout_offset[1])})",
         f"Circuits:   {len(prog.circuits)} ({prog.circuit_layout}), outline {fmt(prog.circuit_width)} × {fmt(prog.circuit_height)}, "
         f"circuitLayoutOffset ({fmt(prog.circuit_layout_offset[0])}, {fmt(prog.circuit_layout_offset[1])})",
-        f"Placements: {len(prog.placements)} per circuit, {len(prog.placements) * len(prog.circuits)} on the panel",
+        f"Placements: {len(prog.placements)} in one circuit, from {len(layout.circuit_numbers)} circuits"
+        if flat
+        else f"Placements: {len(prog.placements)} per circuit, {len(prog.placements) * len(prog.circuits)} on the panel",
         f"Components: {len(prog.components)}; {_sizes_text(prepared)}",
         f"Fiducials:  {len(prog.fiducials)} on the {m.side} layer"
         + (f" ({', '.join(f.name for f in prog.fiducials)})" if prog.fiducials else "")

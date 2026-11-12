@@ -16,7 +16,8 @@ def format_report(a: PanelAnalysis, *, verbose: bool = False) -> str:
     lines = []
     lines.append(f"Source:   {job.path} ({job.source.kind})")
     lines.append(f"ODB++:    version {job.info.version}, {job.info.application}, default units {job.default_units.value}")
-    lines.append(f"Steps:    panel={a.panel_step or '-'}  board={a.board_step or '-'}  mode={a.mode}")
+    boards = f"designs={', '.join(d.step for d in a.designs)}" if a.designs else f"board={a.board_step or '-'}"
+    lines.append(f"Steps:    panel={a.panel_step or '-'}  {boards}  mode={a.mode}")
     roles = ", ".join(f"{ROLE_LABELS.get(k, k)}={v}" for k, v in sorted(a.layer_roles.items()))
     lines.append(f"Layers:   {roles or '-'}")
     lines.append("")
@@ -28,19 +29,20 @@ def format_report(a: PanelAnalysis, *, verbose: bool = False) -> str:
             f"at ({rp[0]:.3f}, {rp[1]:.3f})"
         )
         lines.append("")
-        lines.append("  #       dX        dY   rot(CCW)  mirror  source        residual")
+        lines.append("  #       dX        dY   rot(CCW)  mirror  source        residual" + ("  design" if a.designs else ""))
         for c in a.circuits:
             res = "-" if c.residual is None else f"{c.residual:.4f}"
             lines.append(
                 f"  {c.index:<3} {c.dx:9.3f} {c.dy:9.3f} {c.rotation:9.3f}  {'yes' if c.mirror else 'no':<6}  "
-                f"{c.source:<12}  {res}"
+                f"{c.source:<12}  {res}" + (f"{'':<8}  {c.design}" if a.designs else "")
             )
     top = sum(1 for p in a.placements if p.layer == "top")
     bottom = len(a.placements) - top
     panel_fids = [f for f in a.fiducial_candidates if f.selectable]
     lines.append("")
+    per = f"in {len(a.designs)} designs, each in its own circuits" if a.designs else "per circuit"
     lines.append(
-        f"Placements: {len(a.placements)} per circuit (top {top}, bottom {bottom}); "
+        f"Placements: {len(a.placements)} {per} (top {top}, bottom {bottom}); "
         f"panel parts: {len(a.panel_parts)}; fiducial candidates: {len(panel_fids)} panel, "
         f"{len(a.fiducial_candidates) - len(panel_fids)} circuit"
     )
@@ -55,8 +57,8 @@ def format_report(a: PanelAnalysis, *, verbose: bool = False) -> str:
     if verbose and a.placements:
         lines.append("")
         lines.append("  designator   part             package        side      X         Y      rot   paste")
-        ref_x, ref_y = a.reference_board
         for p in a.placements:
+            ref_x, ref_y = a.reference_of(p.design)
             paste = p.paste.describe() if p.paste else "-"
             status = status_text(p)
             lines.append(

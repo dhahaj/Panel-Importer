@@ -66,9 +66,11 @@ class ComponentDialog(QDialog):
         *,
         level: str = "board",
         position: dict[str, tuple[float, float] | None] | None = None,
+        design: str = "",
     ) -> None:
         super().__init__(parent)
         self.a = analysis
+        self.design = design  # where a part is added on a panel of several designs
         self.keys = list(keys or [])
         self.mode = "add" if not self.keys else ("one" if len(self.keys) == 1 else "many")
         self.part = find_part(analysis, *self.keys[0]) if self.mode == "one" else None
@@ -285,7 +287,13 @@ class ComponentDialog(QDialog):
         if self.mode == "many":
             return
         level = self.level.currentData()
-        if level == "board":
+        if level == "board" and self.a.designs:
+            self.frame.setText(
+                f"X/Y are circuit-relative, from the reference point ({self.a.reference_kind}) of the "
+                "design the designator names (<design>/<designator>), as in the components table. The "
+                "component is placed in every circuit of that design."
+            )
+        elif level == "board":
             self.frame.setText(
                 f"X/Y are circuit-relative, from each circuit's reference point ({self.a.reference_kind}), "
                 "as in the components table. The component is placed in every circuit."
@@ -334,6 +342,9 @@ class ComponentDialog(QDialog):
         if any(c.isspace() for c in name):
             return "A designator cannot contain spaces."
         level = self.chosen_level()
+        if level == "board" and self.a.designs and not self.a.design_of(name):
+            listed = " or ".join(f"{d.step}/" for d in self.a.designs)
+            return f"Start the designator with the design the part belongs to: {listed}"
         own = self.keys[0] if self.keys else None
         for lv, part in all_parts(self.a):
             if lv == level and part.designator.lower() == name.lower() and (lv, part.designator) != own:

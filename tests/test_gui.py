@@ -284,7 +284,7 @@ def test_layer_colours_change_in_place(window, tmp_path, app):
     window._set_layer_color("circuit_outlines", QColor("#00ff00"))
     outlines = [i for i in items("circuit_outlines") if isinstance(i, QGraphicsPathItem)]
     numbers = [i for i in items("circuit_outlines") if isinstance(i, QGraphicsSimpleTextItem)]
-    assert len(outlines) == len(numbers) == 6
+    assert len(outlines) == len(numbers) == 12  # per circuit: outline, orientation mark; number, design
     assert all(i.pen().color() == QColor("#00ff00") for i in outlines)
     assert all(i.brush().color() == QColor("#00ff00") for i in numbers)
     # Bottom bodies follow the bottom centroid colour, faded; top bodies keep theirs.
@@ -429,3 +429,36 @@ def test_big_panel_loads_and_pans_quickly(window, tmp_path, app):
         frames.append(time.perf_counter() - t)
     frames.sort()
     assert frames[len(frames) // 2] < 0.05, f"median pan frame {frames[len(frames) // 2] * 1000:.0f} ms"
+
+
+def test_mixed_panel_shows_each_design_in_its_circuits(window, tmp_path, app):
+    from panelimport.gui.canvas import MarkerItem
+    from tests.synthetic.panel_types import mixed_job
+
+    window.open_job(OdbJob(mixed_job().write_folder(tmp_path)), Decisions())
+    app.processEvents()
+    assert window.summary.kind.text() == (
+        "Panel type: 2 designs · ISS output: flattened into one circuit "
+        "(2 designs: MAIN in circuits 1, 2; AUX in circuits 3, 4)"
+    )
+    table = window.circuits_panel.table
+    assert [table.item(r, 1).text() for r in range(table.rowCount())] == ["MAIN", "MAIN", "AUX", "AUX"]
+    shown = {m.key for m in window.canvas._markers if isinstance(m, MarkerItem) and m.kind == "placement"}
+    assert shown == {(d, k) for d in ("MAIN/U1", "MAIN/C1") for k in (1, 2)} | {
+        (d, k) for d in ("AUX/U1", "AUX/R1") for k in (3, 4)
+    }
+    assert not window.summary.as_is_btn.isVisible()
+
+
+def test_as_is_toggle_for_a_flat_panel(window, tmp_path, app):
+    from tests.synthetic.panel_types import flat_job
+
+    window.open_job(OdbJob(flat_job().write_folder(tmp_path)), Decisions())
+    bar = window.summary
+    assert window.analysis.mode == "single-board" and bar.as_is_btn.isVisible() and not bar.as_is_btn.isChecked()
+    bar.as_is_btn.click()
+    assert window.analysis.mode == "as-is" and bar.as_is_btn.isChecked()
+    assert bar.kind.text().startswith("Panel type: flat panel, placed as it is · ISS output: one allocation per circuit")
+    assert bar.confirm_btn.isEnabled()
+    window.controller.undo_stack.undo()
+    assert window.analysis.mode == "single-board" and not bar.as_is_btn.isChecked()

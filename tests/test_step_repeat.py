@@ -199,12 +199,16 @@ def test_duplicate_designator(tmp_path):
     assert dup.designator == "R1" and dup.severity.value == "error"
 
 
-def test_ambiguous_board_steps(tmp_path):
+def test_several_board_steps_are_designs(tmp_path):
+    """Two repeated steps with components are two designs of the panel, not a doubt about
+    the roles; choosing a board step uses that design only."""
     job = sr_panel()
     other = job.step("pcb2", 20, 20)
     other.component("X1", "R0402", 5, 5)
     job.steps["panel"].step_repeat("pcb2", 0, 90, 0, 0, 1, 1)
     a = run(job, tmp_path)
-    assert "ambiguous_steps" in codes(a)
+    assert "ambiguous_steps" not in codes(a) and "mixed_designs" in codes(a)
+    assert sorted(d.step for d in a.designs) == ["PCB", "PCB2"] and a.board_step is None
     b = run(job, tmp_path / "b", panel_step="panel", board_step="pcb")
-    assert "ambiguous_steps" not in codes(b)
+    assert "ambiguous_steps" not in codes(b) and "mixed_designs" not in codes(b)
+    assert not b.designs and b.board_step == "PCB"

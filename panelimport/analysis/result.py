@@ -14,17 +14,19 @@ from panelimport import __version__
 from panelimport.analysis.checks import PasteResult
 from panelimport.analysis.fiducials import FiducialCandidate
 from panelimport.analysis.roles import StepDetection, detect_layer_roles
-from panelimport.analysis.transforms import GridInfo, Transform, ccw_from_odb, norm_angle
+from panelimport.analysis.transforms import GridInfo, Transform, angle_diff, ccw_from_odb, norm_angle
 from panelimport.io.bom import Bom
 from panelimport.io.odb.job import OdbJob
 from panelimport.model.issues import Issue, Severity
 from panelimport.model.panel import (
     SIZE_FIELDS,
     Acknowledgement,
+    DESIGNS_VERSION,
     Circuit,
     CircuitReference,
     ComponentEdit,
     Decisions,
+    Design,
     EditFrame,
     Fiducial,
     Grid,
@@ -90,6 +92,17 @@ class CircuitInfo:
     label: str = ""
     # Flattened panels: where each copy actually is (designator -> x, y, rotation_raw, side).
     positions: dict[str, tuple[float, float, float, str]] | None = None
+    design: str = ""  # its design's step when the panel repeats several (PanelAnalysis.designs)
+
+
+@dataclass
+class DesignInfo:
+    """One design of a panel that repeats several: its step and its own board frame."""
+
+    step: str
+    outline: list[tuple[float, float]]  # its board frame
+    reference: tuple[float, float]  # its reference point, its board frame
+    circuits: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -115,6 +128,7 @@ class PlacementInfo:
     state: str = ""  # "" as exported | "edited" | "added" | "removed"
     export: dict[str, object] = field(default_factory=dict)  # export values of the fields an edit changed
     edit: ComponentEdit | None = None
+    design: str = ""  # as CircuitInfo.design; the designator then starts with "<design>/"
 
     @property
     def moved(self) -> bool:
@@ -187,6 +201,10 @@ class PanelAnalysis:
     board_outline: list[tuple[float, float]] = field(default_factory=list)  # board frame
     reference_kind: str = ""
     reference_board: tuple[float, float] = (0.0, 0.0)
+    # A panel that repeats several designs: every one, circuit 1's first (board_step is then
+    # None, and board_outline and reference_board are circuit 1's design's).
+    designs: list[DesignInfo] = field(default_factory=list)
+    nested: bool = False  # circuits placed through a sub-panel step
     circuits: list[CircuitInfo] = field(default_factory=list)
     grid: GridInfo | None = None
     grid_source: str = ""
@@ -251,11 +269,16 @@ class PanelAnalysis:
     @property
     def summary(self) -> str:
         n = len(self.circuits)
+        if self.mode == "as-is" and n:
+            return "The whole panel as one circuit (no STEP-REPEAT), every component where it is"
         if self.mode == "single-board" and self.decisions.single_board is None:
             return "Single board (no STEP-REPEAT, every designator once): confirm single-board mode"
         if n == 0 or self.grid is None:
             return "No circuits identified"
         g = self.grid
+        if self.designs:
+            counts = ", ".join(f"{d.step} × {len(d.circuits)}" for d in self.designs)
+            return f"{n} circuits of {len(self.designs)} designs ({counts}), from STEP-REPEAT"
         source = {
             "step-repeat": "from STEP-REPEAT",
             "fitted": "from repeated designators",
@@ -270,6 +293,30 @@ class PanelAnalysis:
         return text
 
     @property
+    def panel_type(self) -> str:
+        """What kind of panel this is, in a few words."""
+        if self.mode == "as-is":
+            return "flat panel, placed as it is"
+        if self.mode == "single-board":
+            return "single board"
+        if not self.circuits:
+            return "unknown"
+        tol = self.settings.tolerances
+        if self.designs:
+            kind = f"{len(self.designs)} designs"
+        elif any(angle_diff(c.rotation, 0.0) > tol.rotation for c in self.circuits):
+            kind = "irregular, rotated copies"
+        elif self.grid is not None and not self.grid.uniform and len(self.circuits) > 1:
+            kind = "irregular spacing"
+        else:
+            kind = "grid"
+        if self.mode == "flattened":
+            kind += ", copies found by designator"
+        if self.nested:
+            kind += ", nested"
+        return kind
+
+    @property
     def edit_frame(self) -> EditFrame:
         """The frame this analysis expresses component-edit coordinates in."""
         manual = self.mode == "single-board" and self.decisions.single_board is not None
@@ -280,6 +327,35 @@ class PanelAnalysis:
             order=self.numbering.order,
             panel_origin="manual" if manual else self.settings.panel_origin,
         )
+
+    # ------------------------------------------------------------------ designs
+    def design(self, step: str) -> DesignInfo | None:
+        return next((d for d in self.designs if d.step == step), None)
+
+    def design_of(self, designator: str) -> str:
+        """The design a board-level designator names ("" when the panel has one design, or
+        when it names none of them)."""
+        head, sep, _rest = designator.partition("/")
+        return head if sep and self.design(head) is not None else ""
+
+    def reference_of(self, design: str) -> tuple[float, float]:
+        """Reference point of ``design`` in its own board frame."""
+        d = self.design(design)
+        return d.reference if d is not None else self.reference_board
+
+    def outline_of(self, design: str) -> list[tuple[float, float]]:
+        d = self.design(design)
+        return d.outline if d is not None else self.board_outline
+
+    def places(self, circuit: CircuitInfo, p: PlacementInfo) -> bool:
+        """Whether ``circuit`` places ``p`` (only its own design's parts, when there are several)."""
+        return not self.designs or p.design == circuit.design
+
+    def circuits_of(self, p: PlacementInfo) -> list[CircuitInfo]:
+        """The circuits that place ``p``: every circuit, or those of its design."""
+        if not self.designs:
+            return self.circuits
+        return [c for c in self.circuits if c.design == p.design]
 
     # ------------------------------------------------------------------ geometry
     def layer_draws(self) -> list[LayerDraw]:
@@ -321,7 +397,8 @@ class PanelAnalysis:
         for c, region in self._regions:
             if region.contains(pt):
                 bx, by = self._inverses[c.index].apply(x, y)
-                return c.index, bx - self.reference_board[0], by - self.reference_board[1]
+                rx, ry = self.reference_of(c.design)
+                return c.index, bx - rx, by - ry
         return None
 
     # ------------------------------------------------------------------ project
@@ -337,6 +414,7 @@ class PanelAnalysis:
             src_path = relative_source_path(self.job.path, Path(project_path))
         origin_kind = "manual" if self.mode == "single-board" else self.settings.panel_origin
         return PanelProject(
+            version=DESIGNS_VERSION if self.designs else DESIGNS_VERSION - 1,
             generator=f"panelimport {__version__}",
             source=SourceInfo(
                 kind="odb++",
@@ -372,6 +450,17 @@ class PanelAnalysis:
                 mirror=bool(c1.transform.mirrored) if c1 else False,
             ),
             circuit_outline=[[r6(x - ref_x), r6(y - ref_y)] for x, y in normalize_outline(self.board_outline)],
+            designs=[
+                Design(
+                    name=d.step,
+                    board_x=r6(d.reference[0]),
+                    board_y=r6(d.reference[1]),
+                    outline=[
+                        [r6(x - d.reference[0]), r6(y - d.reference[1])] for x, y in normalize_outline(d.outline)
+                    ],
+                )
+                for d in self.designs
+            ],
             circuits=[
                 Circuit(
                     index=c.index,
@@ -381,6 +470,7 @@ class PanelAnalysis:
                     mirror=c.mirror,
                     source=c.source,
                     residual=None if c.residual is None else r6(c.residual),
+                    design=c.design,
                 )
                 for c in self.circuits
             ],
@@ -392,14 +482,15 @@ class PanelAnalysis:
                     part_number=p.part_number,
                     package=p.package,
                     layer=p.layer,
-                    x=r6(p.x - ref_x),
-                    y=r6(p.y - ref_y),
+                    x=r6(p.x - self.reference_of(p.design)[0]),
+                    y=r6(p.y - self.reference_of(p.design)[1]),
                     rotation=r6(p.rotation),
                     rotation_raw=r6(p.rotation_raw),
                     attributes=dict(sorted(p.attributes.items())),
                     width=r6(p.width),
                     length=r6(p.length),
                     height=r6(p.height),
+                    design=p.design,
                 )
                 for p in self.placements
             ],

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.settings import CORNERS, ORDERS, REFERENCE_KINDS
 
-COLUMNS = ["#", "ΔX (mm)", "ΔY (mm)", "Rotation (°)", "Mirror", "Source", "Residual (mm)"]
+COLUMNS = ["#", "Design", "ΔX (mm)", "ΔY (mm)", "Rotation (°)", "Mirror", "Source", "Residual (mm)"]
 
 
 def num_item(value: float | int | None, fmt: str = "{:.3f}") -> QTableWidgetItem:
@@ -106,11 +106,12 @@ class CircuitsPanel(QWidget):
             self.table.setRowCount(len(a.circuits))
             for r, c in enumerate(a.circuits):
                 self.table.setItem(r, 0, num_item(c.index, "{}"))
-                self.table.setItem(r, 1, num_item(c.dx))
-                self.table.setItem(r, 2, num_item(c.dy))
-                self.table.setItem(r, 3, num_item(c.rotation))
-                self.table.setItem(r, 4, text_item("yes" if c.mirror else "no"))
-                self.table.setItem(r, 5, text_item(c.source))
-                self.table.setItem(r, 6, num_item(c.residual, "{:.4f}"))
+                self.table.setItem(r, 1, text_item(c.design or a.board_step or "-"))
+                self.table.setItem(r, 2, num_item(c.dx))
+                self.table.setItem(r, 3, num_item(c.dy))
+                self.table.setItem(r, 4, num_item(c.rotation))
+                self.table.setItem(r, 5, text_item("yes" if c.mirror else "no"))
+                self.table.setItem(r, 6, text_item(c.source))
+                self.table.setItem(r, 7, num_item(c.residual, "{:.4f}"))
         finally:
             self._updating = False

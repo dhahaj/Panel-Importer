@@ -143,29 +143,56 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
 
     # ------------------------------------------------------------ circuits
     ref = project.circuit_reference
+    other_side = "its parts face the other side of the panel, and a program places one side only"
     if ref.mirror:
-        issues.append(error("mirrored_circuit", "Circuit 1 is mirrored on the panel", circuit=1, subject="circuit"))
+        issues.append(error("mirrored_circuit", f"Circuit 1 is mirrored on the panel: {other_side}", circuit=1, subject="circuit"))
     for c in project.circuits:
         if c.mirror:
-            issues.append(error("mirrored_circuit", f"Circuit {c.index} is mirrored relative to circuit 1", circuit=c.index))
-    for number, c in zip(layout.circuit_numbers, layout.program.circuits):
-        if c.angle:
             issues.append(
-                warning(
-                    "rotated_circuit",
-                    f"Circuit {number} is written with allocation angle {c.angle:g}°; rotated allocations have never "
-                    "been tested in JaNets",
-                    circuit=number,
-                )
+                error("mirrored_circuit", f"Circuit {c.index} is mirrored relative to circuit 1: {other_side}", circuit=c.index)
             )
-    if settings.circuit_layout == "matrix" and layout.matrix is None:
+    if layout.output == "flatten":
+        n = len(layout.program.placements)
         issues.append(
-            error(
-                "matrix_layout",
-                "circuit_layout=matrix needs a full, uniform, unrotated grid of circuits; use nonmatrix",
-                subject="layout",
+            warning(
+                "flatten_no_bad_marks",
+                f"Written as one circuit ({layout.output_reason}): {n} placements from {len(layout.circuit_numbers)} "
+                "circuits, named <designator>_<circuit>. Per-circuit bad-mark skipping is not available",
+                subject="output",
             )
         )
+        if settings.circuit_layout == "matrix":
+            issues.append(
+                error("matrix_layout", "circuit_layout=matrix needs one allocation per circuit, not flatten", subject="layout")
+            )
+    else:
+        for number, c in zip(layout.circuit_numbers, layout.program.circuits):
+            if c.angle:
+                issues.append(
+                    error(
+                        "rotated_circuit",
+                        f"Circuit {number} would be written with allocation angle {c.angle:g}°, which no reference "
+                        "program proves. Write the panel flattened (circuit_output auto or flatten)",
+                        circuit=number,
+                    )
+                )
+        if settings.circuit_layout == "matrix" and layout.matrix is None:
+            issues.append(
+                error(
+                    "matrix_layout",
+                    "circuit_layout=matrix needs a full, uniform, unrotated grid of circuits; use nonmatrix",
+                    subject="layout",
+                )
+            )
+        if project.designs:
+            issues.append(
+                error(
+                    "mixed_designs",
+                    f"The panel repeats {len(project.designs)} designs, but one allocation per circuit places the same "
+                    "parts in every circuit. Write the panel flattened (circuit_output auto or flatten)",
+                    subject="output",
+                )
+            )
 
     # ------------------------------------------------------------ component names
     for p in project.placements:
@@ -264,17 +291,22 @@ def _size_checks(project: PanelProject, layout: IssLayout) -> list[Issue]:
 
 def _outline_checks(project: PanelProject) -> list[Issue]:
     issues: list[Issue] = []
-    if len(project.circuit_outline) >= 3:
-        circuit = prep(Polygon(project.circuit_outline).buffer(EDGE_TOL))
-        for p in project.placements:
-            if not circuit.contains(Point(p.x, p.y)):
-                issues.append(
-                    warning("outside_circuit", f"Placement at ({p.x:.3f}, {p.y:.3f}) is outside the circuit outline", designator=p.designator)
-                )
+    outlines = {}  # design -> its prepared outline (each placement is relative to its own)
+    for p in project.placements:
+        if p.design not in outlines:
+            outline = project.design_outline(p.design)
+            outlines[p.design] = prep(Polygon(outline).buffer(EDGE_TOL)) if len(outline) >= 3 else None
+        circuit = outlines[p.design]
+        if circuit is not None and not circuit.contains(Point(p.x, p.y)):
+            issues.append(
+                warning("outside_circuit", f"Placement at ({p.x:.3f}, {p.y:.3f}) is outside the circuit outline", designator=p.designator)
+            )
     panel = prep(Polygon(panel_outline(project)).buffer(EDGE_TOL))
     frames = circuit_transforms(project)
     for p in project.placements:
         for c, tf in zip(project.circuits, frames):
+            if project.designs and c.design != p.design:
+                continue
             x, y = tf.apply(p.x, p.y)
             if not panel.contains(Point(x, y)):
                 issues.append(

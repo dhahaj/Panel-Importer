@@ -7,7 +7,7 @@ shown read-only (no layers, no re-analysis).
 from __future__ import annotations
 
 from panelimport.analysis.fiducials import FiducialCandidate
-from panelimport.analysis.result import CircuitInfo, PanelAnalysis, PanelPartInfo, PlacementInfo
+from panelimport.analysis.result import CircuitInfo, DesignInfo, PanelAnalysis, PanelPartInfo, PlacementInfo
 from panelimport.analysis.transforms import GridInfo, Transform, norm_angle
 from panelimport.model.issues import Issue
 from panelimport.model.panel import Decisions, PanelProject
@@ -21,17 +21,29 @@ def _rigid(rotation: float, mirror: bool) -> Transform:
 def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = None) -> PanelAnalysis:
     ref = project.circuit_reference
     ref_board = (ref.board_x, ref.board_y)
-    t1 = Transform.translation(ref.x, ref.y) @ _rigid(ref.rotation, ref.mirror) @ Transform.translation(-ref.board_x, -ref.board_y)
+    # Each design's reference point in its own board frame ("": the only design).
+    boards = {"": ref_board, **{d.name: (d.board_x, d.board_y) for d in project.designs}}
     board_outline = [(x + ref.board_x, y + ref.board_y) for x, y in project.circuit_outline]
+    designs = [
+        DesignInfo(
+            d.name,
+            [(x + d.board_x, y + d.board_y) for x, y in d.outline],
+            (d.board_x, d.board_y),
+            [c.index for c in project.circuits if c.design == d.name],
+        )
+        for d in project.designs
+    ]
     circuits = []
     for c in project.circuits:
+        bx, by = boards.get(c.design, ref_board)
+        t1 = Transform.translation(ref.x, ref.y) @ _rigid(ref.rotation, ref.mirror) @ Transform.translation(-bx, -by)
         rel = (
             Transform.translation(ref.x + c.dx, ref.y + c.dy)
             @ _rigid(c.rotation, c.mirror)
             @ Transform.translation(-ref.x, -ref.y)
         )
         tf = rel @ t1
-        outline = [tf.apply(x, y) for x, y in board_outline]
+        outline = [tf.apply(x + bx, y + by) for x, y in project.design_outline(c.design)]
         xs = [p[0] for p in outline] or [0.0]
         ys = [p[1] for p in outline] or [0.0]
         circuits.append(
@@ -47,6 +59,7 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
                 outline=outline,
                 center=((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
                 size=(max(xs) - min(xs), max(ys) - min(ys)),
+                design=c.design,
             )
         )
     decisions = Decisions(single_board=project.single_board, confirmed=True)
@@ -59,6 +72,7 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
     a.board_outline = board_outline
     a.reference_kind = ref.kind
     a.reference_board = ref_board
+    a.designs = designs
     a.circuits = circuits
     g = project.grid
     a.grid = GridInfo(g.cols, g.rows, g.pitch_x, g.pitch_y, g.uniform, 0.0, [], [])
@@ -71,8 +85,8 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
             part_name=p.part_name,
             package=p.package,
             layer=p.layer,
-            x=p.x + ref.board_x,
-            y=p.y + ref.board_y,
+            x=p.x + boards.get(p.design, ref_board)[0],
+            y=p.y + boards.get(p.design, ref_board)[1],
             rotation_raw=p.rotation_raw,
             rotation=p.rotation,
             mirror=p.layer == "bottom",
@@ -82,6 +96,7 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
             width=p.width,
             length=p.length,
             height=p.height,
+            design=p.design,
         )
         for p in project.placements
     ]

@@ -97,14 +97,32 @@ def test_mirrored_circuit(tmp_path):
     assert_refused(prepared, tmp_path)
     project = make_project(ref=(45.0, 5.0), ref_mirror=True, circuits=[(0, 0, 0)])
     assert [(i.code, i.circuit) for i in issues(project).errors] == [("mirrored_circuit", 1)]
+    flat = make_project()
+    flat.circuits[1].mirror = True
+    prepared = issues(flat, IssSettings(circuit_output="flatten"))  # flattening never hides a mirror
+    assert [(i.code, i.circuit) for i in prepared.errors] == [("mirrored_circuit", 2)]
+    assert "other side of the panel" in prepared.errors[0].message
 
 
-def test_rotated_circuit_warns():
+def test_rotated_circuit_is_flattened_never_written_as_an_angle(tmp_path):
     # Circuit 2's reference at (130, 30), turned 90°: its parts span x 80..130, y 30..70.
     project = make_project(width=150, height=150, ref=(20, 20), circuits=[(0, 0, 0), (110.0, 10.0, 90.0)])
     prepared = issues(project)
-    assert [(i.code, i.circuit, i.severity) for i in prepared.issues] == [("rotated_circuit", 2, Severity.WARNING)]
+    assert prepared.layout.output == "flatten"
+    assert [(i.code, i.severity) for i in prepared.issues] == [("flatten_no_bad_marks", Severity.WARNING)]
+    assert "circuit 2 rotated relative to circuit 1" in prepared.issues[0].message
     assert prepared.can_write
+    forced = issues(project, IssSettings(circuit_output="circuits"))
+    assert [(i.code, i.circuit) for i in forced.errors] == [("rotated_circuit", 2)]
+    assert_refused(forced, tmp_path)
+
+
+def test_flatten_by_choice_and_matrix_conflict():
+    prepared = issues(make_project(), IssSettings(circuit_output="flatten"))
+    assert prepared.layout.output == "flatten" and codes(prepared) == ["flatten_no_bad_marks"]
+    assert "circuit_output=flatten" in prepared.issues[0].message
+    prepared = issues(make_project(), IssSettings(circuit_output="flatten", circuit_layout="matrix"))
+    assert codes(prepared, Severity.ERROR) == ["matrix_layout"]
 
 
 def test_part_number_fallback_and_missing_name(tmp_path):

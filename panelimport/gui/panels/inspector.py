@@ -108,7 +108,8 @@ class Inspector(QWidget):
         ]
         if p.written and p.written != p.designator:
             rows.append(("Written as", p.written))
-        c = next((c for c in a.circuits if c.index == circuit), a.circuits[0] if a.circuits else None)
+        own = a.circuits_of(p)
+        c = next((c for c in own if c.index == circuit), own[0] if own else None)
         if c is not None:
             x, y, rot = a.circuit_position(p, c)
             rows.append((f"Panel X (circuit {c.index})", f"{x:.4f}"))

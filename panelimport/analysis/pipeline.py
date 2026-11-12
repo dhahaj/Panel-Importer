@@ -2,11 +2,15 @@
 
 Modes:
 
-* ``panel`` — the panel step has STEP-REPEAT blocks; circuits are read from them.
+* ``panel`` — the panel step has STEP-REPEAT blocks; circuits are read from them.  When
+  the blocks repeat several steps with components and no board step is chosen, each is a
+  design: its copies are circuits that place its own parts, named ``<step>/<designator>``.
 * ``flattened`` — no STEP-REPEAT, designators repeat: circuits are reconstructed from
   the repeated designators (``analysis.grouping``) and fitted transforms.
 * ``single-board`` — no STEP-REPEAT and every designator appears once: the user
   confirms and enters the circuit grid.  The mode is never chosen silently.
+* ``as-is`` — no STEP-REPEAT, chosen by the user (``Decisions.as_is``): the whole panel
+  step is one circuit and every component is placed where it is.
 
 Frames: the *board frame* is the board step's own coordinate system (for a flattened
 panel: circuit 1 where it sits in the panel step).  The *panel frame* is the panel
@@ -48,6 +52,7 @@ from panelimport.analysis.fiducials import (
 from panelimport.analysis.layers import pad_set
 from panelimport.analysis.result import (
     CircuitInfo,
+    DesignInfo,
     LayerDraw,
     PanelAnalysis,
     PanelPartInfo,
@@ -55,7 +60,7 @@ from panelimport.analysis.result import (
     StepInstanceInfo,
     compose_rotation,
 )
-from panelimport.analysis.roles import LAYER_ROLES, detect_layer_roles, detect_steps
+from panelimport.analysis.roles import LAYER_ROLES, detect_layer_roles, detect_steps, has_components
 from panelimport.analysis.step_repeat import Instance, expand
 from panelimport.analysis.transforms import (
     Transform,
@@ -70,7 +75,7 @@ from panelimport.io.odb.components import OdbComponent
 from panelimport.io.odb.eda import Package
 from panelimport.io.odb.job import OdbJob
 from panelimport.model.issues import Issue, Severity, error, info, sort_issues, warning
-from panelimport.model.panel import Decisions, EditFrame, Numbering, PanelProject
+from panelimport.model.panel import Decisions, EditFrame, Numbering, PanelProject, base_designator
 from panelimport.settings import CORNERS, ORDERS, PANEL_ORIGINS, REFERENCE_KINDS, Settings
 
 __all__ = ["analyze", "decisions_from_project", "with_changes", "PanelAnalysis", "LayerDraw"]
@@ -326,8 +331,23 @@ def analyze(
         instances, exp_issues = expand(job, panel_step, settings.step_repeat_anchor)
         issues.extend(exp_issues)
 
+    if instances and decisions.as_is:
+        issues.append(
+            warning(
+                "as_is_ignored",
+                f"As-is placement is for panels without STEP-REPEAT; '{panel_step}' has STEP-REPEAT blocks, "
+                "so its circuits come from them",
+                subject="as-is",
+            )
+        )
     if instances:
-        board_instances = [i for i in instances if board_step and i.step.lower() == board_step.lower()]
+        designs = _design_steps(job, instances)
+        mixed = decisions.board_step is None and len(designs) > 1
+        steps = designs if mixed else [board_step] if board_step else []
+        if mixed:
+            a.board_step = None
+        wanted = {s.lower() for s in steps}
+        board_instances = [i for i in instances if i.step.lower() in wanted]
         if not board_instances:
             issues.append(
                 error(
@@ -339,7 +359,7 @@ def analyze(
             )
             return _finish(a, issues)
         a.mode = "panel"
-        ctx = _step_repeat_mode(a, issues, panel_step, board_step, instances, board_instances, to_panel, ref_kind)
+        ctx = _step_repeat_mode(a, issues, panel_step, steps, mixed, instances, board_instances, to_panel, ref_kind)
     else:
         comps = _step_components(job, panel_step)
         if not comps:
@@ -349,7 +369,10 @@ def analyze(
         groups = grouping.group_copies(copies)
         n = grouping.copy_count(groups)
         a.copy_count = n
-        if n <= 1:
+        if decisions.as_is:
+            a.mode = "as-is"
+            ctx = _as_is_mode(a, issues, panel_step, comps, to_panel, ref_kind)
+        elif n <= 1:
             a.mode = "single-board"
             a.suggested_suffix = grouping.suggest_suffix([c.designator for c in copies])
             ctx = _single_board_mode(a, issues, panel_step, comps, to_panel, ref_kind)
@@ -396,13 +419,18 @@ def _finish(a: PanelAnalysis, issues: list[Issue]) -> PanelAnalysis:
 def _reference_point(
     a: PanelAnalysis, issues: list[Issue], ref_kind: str, board_step: str | None
 ) -> None:
-    hdr = a.job.stephdr(board_step) if board_step else None
+    a.reference_kind, a.reference_board = _reference_of(a.job, issues, ref_kind, board_step, a.board_outline)
+
+
+def _reference_of(
+    job: OdbJob, issues: list[Issue], ref_kind: str, board_step: str | None, outline: list[tuple[float, float]]
+) -> tuple[str, tuple[float, float]]:
+    """The reference kind used and where it sits in the board frame of ``board_step``."""
+    hdr = job.stephdr(board_step) if board_step else None
     if ref_kind == "board-origin" and board_step:
-        a.reference_kind, a.reference_board = ref_kind, (0.0, 0.0)
-        return
+        return ref_kind, (0.0, 0.0)
     if ref_kind == "board-datum" and hdr is not None:
-        a.reference_kind, a.reference_board = ref_kind, hdr.datum
-        return
+        return ref_kind, hdr.datum
     if ref_kind != "profile-lower-left":
         issues.append(
             warning(
@@ -411,20 +439,19 @@ def _reference_point(
                 subject="reference",
             )
         )
-    x0, y0, _x1, _y1 = _bbox(a.board_outline)
-    a.reference_kind = "profile-lower-left" if board_step else "outline-lower-left"
-    a.reference_board = (x0, y0)
+    x0, y0, _x1, _y1 = _bbox(outline)
+    return ("profile-lower-left" if board_step else "outline-lower-left"), (x0, y0)
 
 
 def _relative(a: PanelAnalysis, circuits: list[CircuitInfo]) -> None:
-    """Offsets, rotation and mirror of every circuit relative to circuit 1."""
+    """Offsets, rotation and mirror of every circuit relative to circuit 1.  The offset is
+    that of the circuit's own design's reference point."""
     t1_inv = circuits[0].transform.inverse()
-    rx, ry = a.reference_board
-    p1 = circuits[0].transform.apply(rx, ry)
+    p1 = circuits[0].transform.apply(*a.reference_of(circuits[0].design))
     for c in circuits:
         rel = c.transform @ t1_inv
         c.rotation, c.mirror = rel.rotation, rel.mirrored
-        p = c.transform.apply(rx, ry)
+        p = c.transform.apply(*a.reference_of(c.design))
         c.dx, c.dy = p[0] - p1[0], p[1] - p1[1]
     a.circuits = circuits
 
@@ -540,17 +567,20 @@ def _part_numbers(a: PanelAnalysis, issues: list[Issue]) -> None:
 
 
 # ---------------------------------------------------------------------- component edits
-def _reference_xy(a: PanelAnalysis, kind: str) -> tuple[float, float] | None:
-    """Where reference ``kind`` sits in the board frame (None when it does not exist)."""
+def _reference_xy(a: PanelAnalysis, kind: str, design: str = "") -> tuple[float, float] | None:
+    """Where reference ``kind`` sits in the board frame of ``design`` (None when it does
+    not exist)."""
+    step = design or a.board_step
     if kind in ("profile-lower-left", "outline-lower-left"):
-        if not a.board_outline:
+        outline = a.outline_of(design)
+        if not outline:
             return None
-        x0, y0, _x1, _y1 = _bbox(a.board_outline)
+        x0, y0, _x1, _y1 = _bbox(outline)
         return x0, y0
-    if kind == "board-origin" and a.board_step:
+    if kind == "board-origin" and step:
         return 0.0, 0.0
-    if kind == "board-datum" and a.board_step:
-        hdr = a.job.stephdr(a.board_step)
+    if kind == "board-datum" and step:
+        hdr = a.job.stephdr(step)
         return hdr.datum if hdr is not None else None
     return None
 
@@ -564,21 +594,23 @@ def _panel_origin_xy(a: PanelAnalysis, kind: str) -> tuple[float, float]:
     return 0.0, 0.0
 
 
-def _edit_maps(a: PanelAnalysis, ctx: _ModeContext | None) -> tuple[Transform | None, Transform | None]:
+def _edit_maps(
+    a: PanelAnalysis, ctx: _ModeContext | None
+) -> tuple[Callable[[str], Transform | None], Transform | None]:
     """How to carry edit coordinates from the frame they were entered in into this one:
-    (circuit-relative map, panel-frame map); None where the frames cannot be related."""
+    (design -> circuit-relative map, panel-frame map); None where the frames cannot be
+    related."""
     frame = a.decisions.edit_frame
     current = a.edit_frame
     if frame is None or frame == current or not a.decisions.component_edits:
-        return Transform(), Transform()
+        return (lambda _design: Transform()), Transform()
     board: Transform | None = None
+    by_design = False
     rx, ry = a.reference_board
     if (frame.mode == "flattened") != (current.mode == "flattened"):
         board = None  # board frames of different kinds
     elif current.mode != "flattened":
-        ref = _reference_xy(a, frame.reference)  # the board frame is the board step's own
-        if ref is not None:
-            board = Transform.translation(ref[0] - rx, ref[1] - ry)
+        by_design = True  # each design's board frame is its step's own: only the reference moves
     elif (frame.first, frame.order) == (current.first, current.order):
         board = Transform()  # same circuit 1, and the reference is always its outline's corner
     elif ctx is not None and ctx.frame_of is not None and frame.first in CORNERS and frame.order in ORDERS:
@@ -590,7 +622,18 @@ def _edit_maps(a: PanelAnalysis, ctx: _ModeContext | None) -> tuple[Transform | 
     elif frame.panel_origin in PANEL_ORIGINS and current.panel_origin in PANEL_ORIGINS:
         ox, oy = _panel_origin_xy(a, frame.panel_origin)
         panel = Transform.translation(ox - a.panel_origin[0], oy - a.panel_origin[1])
-    return board, panel
+    if by_design:
+        return (lambda design: _reference_moved(a, frame.reference, design)), panel
+    return (lambda _design: board), panel
+
+
+def _reference_moved(a: PanelAnalysis, kind: str, design: str) -> Transform | None:
+    """Circuit-relative coordinates of ``design`` from reference ``kind`` to this analysis's."""
+    ref = _reference_xy(a, kind, design)
+    if ref is None or (a.designs and a.design(design) is None):
+        return None
+    x, y = a.reference_of(design)
+    return Transform.translation(ref[0] - x, ref[1] - y)
 
 
 def _package_lookup(a: PanelAnalysis, ctx: _ModeContext | None):
@@ -598,7 +641,8 @@ def _package_lookup(a: PanelAnalysis, ctx: _ModeContext | None):
     cache: dict[tuple[str, str], Package | None] = {}
 
     def lookup(level: str, name: str) -> Package | None:
-        steps = [ctx.step if ctx else None, a.panel_step]
+        boards = [d.step for d in a.designs] or [ctx.step if ctx else None]
+        steps = [*boards, a.panel_step]
         if level == "panel":
             steps.reverse()
         for step in steps:
@@ -641,6 +685,12 @@ def _paste_checks(a: PanelAnalysis, issues: list[Issue], ctx: _ModeContext | Non
     """Centroid-on-paste checks of what is placed, after the component edits."""
     if ctx is None or not a.circuits:
         return
+    for d in a.designs:  # each design on its own step's paste, located in its first circuit
+        first = next(c for c in a.circuits if c.design == d.step)
+        parts = [p for p in a.placements if p.design == d.step]
+        _paste(a, issues, d.step, parts, first.transform, f"board step '{d.step}'")
+    if a.designs:
+        return
     if ctx.copies is None:
         _paste(a, issues, ctx.step, a.placements, a.circuits[0].transform, ctx.scope)
         return
@@ -665,75 +715,126 @@ def _paste_checks(a: PanelAnalysis, issues: list[Issue], ctx: _ModeContext | Non
 
 
 # ---------------------------------------------------------------------- step-repeat
+def _design_steps(job: OdbJob, instances: list[Instance]) -> list[str]:
+    """The steps with components that the panel repeats and that repeat nothing themselves
+    (sub-panels are not designs), in the order of their first copy."""
+    out: list[str] = []
+    for inst in instances:
+        if any(s.lower() == inst.step.lower() for s in out):
+            continue
+        hdr = job.stephdr(inst.step)
+        if (hdr is None or not hdr.repeats) and has_components(job, inst.step):
+            out.append(inst.step)
+    return out
+
+
 def _step_repeat_mode(
     a: PanelAnalysis,
     issues: list[Issue],
     panel_step: str,
-    board_step: str,
+    steps: list[str],
+    mixed: bool,
     instances: list[Instance],
     board_instances: list[Instance],
     to_panel: Transform,
     ref_kind: str,
 ) -> _ModeContext:
+    """Circuits from the copies of ``steps``: the board step, or every design (``mixed``)."""
     job = a.job
     removed = _removed(a.decisions, "board")
-    board_prof = job.profile(board_step)
-    if board_prof is None:
-        issues.append(_missing(f"steps/{board_step}/profile"))
-    board_comps = _step_components(job, board_step)
-    if not board_comps:
-        issues.append(error("no_components", f"Board step '{board_step}' has no components", subject=board_step))
-    if board_prof is not None:
-        a.board_outline = list(board_prof.outline)
-    elif board_comps:
-        x0, y0, x1, y1 = _bbox([(c.x, c.y) for _s, c in board_comps])
-        a.board_outline = _rect(x0 - 1, y0 - 1, x1 + 1, y1 + 1)
-    else:
-        a.board_outline = _rect(0, 0, 1, 1)
-    _reference_point(a, issues, ref_kind, board_step)
+    frames: dict[str, tuple[list[tuple[float, float]], str, tuple[float, float]]] = {}
+    placements: list[PlacementInfo] = []
+    for step in steps:
+        prof = job.profile(step)
+        if prof is None:
+            issues.append(_missing(f"steps/{step}/profile"))
+        comps = _step_components(job, step)
+        if not comps:
+            issues.append(error("no_components", f"Board step '{step}' has no components", subject=step))
+        if prof is not None:
+            outline = list(prof.outline)
+        elif comps:
+            x0, y0, x1, y1 = _bbox([(c.x, c.y) for _s, c in comps])
+            outline = _rect(x0 - 1, y0 - 1, x1 + 1, y1 + 1)
+        else:
+            outline = _rect(0, 0, 1, 1)
+        frames[step.lower()] = (outline, *_reference_of(job, issues, ref_kind, step, outline))
+        found = _placements(job, step, comps)
+        if mixed:
+            for p in found:
+                p.designator, p.design = f"{step}/{p.designator}", step
+        placements.extend(found)
+        issues.extend(_package_issues(job, step, comps))
+        issues.extend(duplicate_designators([p.designator for p in found if p.designator not in removed]))
 
+    canonical = {s.lower(): s for s in steps}
     raw = []
     for inst in board_instances:
+        outline = frames[inst.step.lower()][0]
         tf = to_panel @ inst.transform
-        pts, center, size = _circuit_shape(tf, a.board_outline)
-        raw.append(CircuitInfo(0, tf, "step-repeat", None, inst.flip, outline=pts, center=center, size=size, label=inst.label))
-    _relative(a, _number(a, raw))
+        pts, center, size = _circuit_shape(tf, outline)
+        design = canonical[inst.step.lower()]
+        raw.append(
+            CircuitInfo(0, tf, "step-repeat", None, inst.flip, outline=pts, center=center, size=size, label=inst.label, design=design)
+        )
+    circuits = _number(a, raw)
+    a.board_outline, a.reference_kind, a.reference_board = frames[circuits[0].design.lower()]
+    if mixed:
+        order = sorted(steps, key=lambda s: min(c.index for c in circuits if c.design == s))
+        a.designs = [
+            DesignInfo(s, frames[s.lower()][0], frames[s.lower()][2], [c.index for c in circuits if c.design == s])
+            for s in order
+        ]
+        listed = "; ".join(
+            f"{d.step} in circuit{'s' if len(d.circuits) > 1 else ''} {', '.join(map(str, d.circuits))}" for d in a.designs
+        )
+        issues.append(
+            info(
+                "mixed_designs",
+                f"The panel repeats {len(a.designs)} designs ({listed}). Each circuit places its own design's "
+                "parts, named <design>/<designator>; choose a board step in the import dialog to use one design only",
+                subject="designs",
+            )
+        )
+    else:
+        for c in circuits:
+            c.design = ""
+    _relative(a, circuits)
     a.grid_source = "step-repeat"
-
-    a.placements = _placements(job, board_step, board_comps)
-    issues.extend(_package_issues(job, board_step, board_comps))
-    issues.extend(duplicate_designators([p.designator for p in a.placements if p.designator not in removed]))
+    a.nested = any(len(i.path) > 1 for i in board_instances)
+    a.placements = placements
 
     # Panel-level parts: the panel step's own components (minus flattened copies of the
     # board) and the components of intermediate (sub-panel) steps.
-    board_by_name = {p.designator: p for p in a.placements}
+    board_by_name: dict[str, list[PlacementInfo]] = {}
+    for p in a.placements:
+        board_by_name.setdefault(base_designator(p.designator, p.design), []).append(p)
     copies_by_name: dict[str, list[tuple[float, float, float, str]]] = {}
     panel_parts: list[PanelPartInfo] = []
     for cp in grouping.make_copies(_step_components(job, panel_step), a.settings.copy_suffix_regex):
-        b = board_by_name.get(cp.base)
-        if b is not None and b.part_name == cp.comp.part_name:
+        if any(b.part_name == cp.comp.part_name for b in board_by_name.get(cp.base, [])):
             x, y = to_panel.apply(cp.x, cp.y)
             copies_by_name.setdefault(cp.base, []).append((x, y, cp.comp.rotation, cp.designator))
         else:
             panel_parts.append(_panel_part(job, cp.side, cp.comp, to_panel, False, panel_step))
     for inst in instances:
-        if inst.step.lower() != board_step.lower():
+        if inst.step.lower() not in canonical:
             for side, comp in _step_components(job, inst.step):
                 panel_parts.append(_panel_part(job, side, comp, to_panel @ inst.transform, inst.flip, inst.step))
     a.panel_parts = panel_parts
 
     n_copies = sum(len(v) for v in copies_by_name.values())
     if n_copies:
+        kept = [p for p in a.placements if p.designator not in removed]
+        names = {base_designator(p.designator, p.design) for p in kept}
+        for name in set(copies_by_name) - names:  # parts that are not placed are not compared
+            copies_by_name.pop(name)
         expected = []
-        for name in removed:  # parts that are not placed are not compared
-            copies_by_name.pop(name, None)
-        for p in a.placements:
-            if p.designator in removed:
-                continue
-            for c in a.circuits:
+        for p in kept:
+            for c in a.circuits_of(p):
                 x, y = c.transform.apply(p.x, p.y)
                 rot = None if c.transform.mirrored else norm_angle(p.rotation_raw - c.transform.rotation)
-                expected.append(ExpectedCopy(p.designator, c.index, x, y, rot))
+                expected.append(ExpectedCopy(base_designator(p.designator, p.design), c.index, x, y, rot))
         issues.append(
             info(
                 "flattened_copies",
@@ -742,17 +843,18 @@ def _step_repeat_mode(
                 subject=panel_step,
             )
         )
-        report_missing = len(copies_by_name) >= 0.5 * max(len(set(board_by_name) - removed), 1)
+        report_missing = len(copies_by_name) >= 0.5 * max(len(names), 1)
         issues.extend(crosscheck(expected, copies_by_name, a.settings.tolerances, report_missing))
 
     circuit_of = {c.label: c.index for c in a.circuits}
     a.instances = [StepInstanceInfo(job, panel_step, to_panel)]
     for inst in instances:
-        is_board = inst.step.lower() == board_step.lower()
+        is_board = inst.step.lower() in canonical
         a.instances.append(
             StepInstanceInfo(job, inst.step, to_panel @ inst.transform, circuit_of.get(inst.label) if is_board else None, inst.flip)
         )
-    return _ModeContext(board_step, f"board step '{board_step}'")
+    step = circuits[0].design or steps[0]
+    return _ModeContext(step, f"board step '{step}'")
 
 
 # ---------------------------------------------------------------------- flattened
@@ -1029,16 +1131,81 @@ def _single_board_mode(
     return ctx
 
 
+# ---------------------------------------------------------------------- as-is
+def _as_is_mode(
+    a: PanelAnalysis,
+    issues: list[Issue],
+    panel_step: str,
+    comps: list[tuple[str, OdbComponent]],
+    to_panel: Transform,
+    ref_kind: str,
+) -> _ModeContext:
+    """The panel step as it is: one circuit, the whole panel, placing every component
+    where it is.  Fiducials and parts confirmed as panel-level are panel parts."""
+    job = a.job
+    a.board_step = panel_step
+    patterns = a.settings.fiducials.patterns
+    confirmed = set(a.decisions.panel_level)
+    placed, panel_level = [], []
+    for side, comp in comps:
+        pkg = _package(job, panel_step, comp)
+        fiducial = matches_pattern(comp.name, patterns) or (pkg is not None and matches_pattern(pkg.name, patterns))
+        (panel_level if fiducial or comp.name in confirmed else placed).append((side, comp))
+    a.panel_parts = [_panel_part(job, side, comp, to_panel, False, panel_step) for side, comp in panel_level]
+
+    prof = job.profile(panel_step)
+    if prof is not None:
+        a.board_outline = list(prof.outline)
+    else:
+        x0, y0, x1, y1 = _bbox([(c.x, c.y) for _s, c in comps])
+        a.board_outline = _rect(x0 - 1, y0 - 1, x1 + 1, y1 + 1)
+    _reference_point(a, issues, ref_kind, panel_step)
+    pts, center, size = _circuit_shape(to_panel, a.board_outline)
+    _relative(a, [CircuitInfo(1, to_panel, "as-is", outline=pts, center=center, size=size, label="panel")])
+    a.grid_source = "as-is"
+
+    # A repeated designator is numbered like a flattened program, lower left first.
+    a.placements = _placements(job, panel_step, placed)
+    counts = Counter(p.designator for p in a.placements)
+    numbered = []
+    for name in sorted(n for n, k in counts.items() if k > 1):
+        copies = [p for p in a.placements if p.designator == name]
+        copies.sort(key=lambda p: tuple(round(v, 3) for v in reversed(to_panel.apply(p.x, p.y))))
+        for k, p in enumerate(copies, start=1):
+            p.designator = f"{name}_{k}"
+        numbered.append(f"{name} ({len(copies)}×)")
+    removed = _removed(a.decisions, "board")
+    issues.extend(duplicate_designators([p.designator for p in a.placements if p.designator not in removed]))
+    issues.extend(_package_issues(job, panel_step, placed))
+    note = f"; repeated designators numbered <designator>_<n> from the lower left: {', '.join(numbered)}" if numbered else ""
+    issues.append(
+        info(
+            "as_is",
+            f"Placed as it is: the whole of '{panel_step}' is one circuit and every component is placed where it is{note}",
+            subject=panel_step,
+        )
+    )
+    a.instances = [StepInstanceInfo(job, panel_step, to_panel)]
+    return _ModeContext(panel_step, f"panel step '{panel_step}'")
+
+
 # ---------------------------------------------------------------------- common checks
 def _common_checks(a: PanelAnalysis, issues: list[Issue]) -> None:
     if not a.circuits:
         return
     tol = a.settings.tolerances
     if a.mode != "single-board" or a.decisions.single_board is not None:
-        geoms = [CircuitGeometry(c.index, c.transform, c.rotation, c.mirror, c.center) for c in a.circuits]
-        issues.extend(orientation_checks(geoms, tol))
+        # Each design's circuits are compared with its first.
+        for design in dict.fromkeys(c.design for c in a.circuits):
+            group = [c for c in a.circuits if c.design == design]
+            first = group[0].transform.inverse()
+            geoms = []
+            for c in group:
+                rel = c.transform @ first
+                geoms.append(CircuitGeometry(c.index, c.transform, rel.rotation, rel.mirrored, c.center))
+            issues.extend(orientation_checks(geoms, tol))
     a.grid = g = derive_grid([c.center for c in a.circuits], [c.size for c in a.circuits], tol.grid)
-    if len(a.circuits) > 1 and not g.uniform:
+    if len(a.circuits) > 1 and not g.uniform and not a.designs:
         n = len(a.circuits)
         if n != g.cols * g.rows or len(set(zip(g.col_of, g.row_of))) != n:
             text = f"The {n} circuits do not fill a {g.cols} × {g.rows} grid"
@@ -1052,6 +1219,11 @@ def _common_checks(a: PanelAnalysis, issues: list[Issue]) -> None:
 
 def _bom_check(a: PanelAnalysis, issues: list[Issue]) -> None:
     if a.bom is None:
+        return
+    if a.designs:
+        issues.append(
+            info("bom_designs", "The BOM is not compared: the panel repeats several designs, and a BOM lists one", subject="bom")
+        )
         return
     placed = {p.designator for p in a.placements} | {p.designator for p in a.panel_parts}
     removed = {p.designator: p for p in [*a.removed_placements, *a.removed_panel_parts]}
@@ -1073,7 +1245,8 @@ def _bom_check(a: PanelAnalysis, issues: list[Issue]) -> None:
 # ---------------------------------------------------------------------- fiducials
 def _fiducials(a: PanelAnalysis, issues: list[Issue]) -> None:
     fs = a.settings.fiducials
-    regions = make_regions([(c.index, c.outline) for c in a.circuits])
+    # As-is, the one circuit is the whole panel: every fiducial on it is a panel fiducial.
+    regions = make_regions([(c.index, c.outline) for c in a.circuits]) if a.mode != "as-is" else []
     cands: list[FiducialCandidate] = []
 
     def add_classified(name, x, y, side, source, diameter=None, designator=None, note=""):
@@ -1087,8 +1260,9 @@ def _fiducials(a: PanelAnalysis, issues: list[Issue]) -> None:
         if matches_pattern(p.designator, fs.patterns) or (p.package and matches_pattern(p.package, fs.patterns)):
             add_classified(p.designator, p.x, p.y, p.layer, "component", designator=p.designator)
     for p in [*a.placements, *a.removed_placements]:
-        if matches_pattern(p.designator, fs.patterns) or (p.package and matches_pattern(p.package, fs.patterns)):
-            for c in a.circuits:
+        name = base_designator(p.designator, p.design)
+        if matches_pattern(name, fs.patterns) or (p.package and matches_pattern(p.package, fs.patterns)):
+            for c in a.circuits_of(p):
                 x, y, _r = a.circuit_position(p, c)
                 cands.append(
                     FiducialCandidate(f"{p.designator}#{c.index}", x, y, p.layer, "circuit", ["component"], c.index, None, p.designator)
@@ -1156,6 +1330,7 @@ def decisions_from_project(project: PanelProject) -> Decisions:
         panel_level=list(project.panel_level_designators),
         single_board=project.single_board,
         component_edits=list(project.component_edits),
+        as_is=project.mode == "as-is",
         edit_frame=EditFrame(
             mode=project.mode,
             reference=project.circuit_reference.kind,

@@ -44,6 +44,12 @@ def project_to_dict(project: PanelProject) -> dict:
         {k: v for k, v in edit.items() if k in ("designator", "level") or _differs(v, defaults[k])}
         for edit in data["component_edits"]
     ]
+    # A panel of one design has no designs to name.
+    if not data["designs"]:
+        del data["designs"]
+    for item in [*data["circuits"], *data["placements"]]:
+        if not item["design"]:
+            del item["design"]
     return data
 
 

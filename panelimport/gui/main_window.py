@@ -238,6 +238,7 @@ class MainWindow(QMainWindow):
         self.summary.confirmRequested.connect(self.confirm_panel)
         self.summary.editRequested.connect(self.edit_roles)
         self.summary.singleBoardRequested.connect(self.single_board_setup)
+        self.summary.asIsToggled.connect(self.set_as_is)
 
     # ------------------------------------------------------------------ state
     @property
@@ -450,6 +451,12 @@ class MainWindow(QMainWindow):
             panel, board = dlg.step_roles()
             self.controller.apply("Change step and layer roles", panel_step=panel, board_step=board, layer_roles=dlg.layer_roles())
 
+    def set_as_is(self, on: bool) -> None:
+        if self.controller.read_only:
+            return
+        text = "Place the panel as it is" if on else "Stop placing the panel as it is"
+        self.controller.apply(text, as_is=on)
+
     def single_board_setup(self) -> None:
         dlg = SingleBoardDialog(self, self.controller.decisions.single_board)
         if dlg.exec() and dlg.result_setup is not None:
@@ -473,11 +480,11 @@ class MainWindow(QMainWindow):
         names = [d for _lv, d in keys]
         return ", ".join(names) if len(names) <= 3 else f"{len(names)} components"
 
-    def add_component(self, level: str = "board", position: dict | None = None) -> None:
+    def add_component(self, level: str = "board", position: dict | None = None, design: str = "") -> None:
         a = self.analysis
         if a is None or self.controller.read_only:
             return
-        dlg = ComponentDialog(self, a, level=level, position=position)
+        dlg = ComponentDialog(self, a, level=level, position=position, design=design)
         if not dlg.exec() or dlg.validate():
             return
         new = edits.added_edit(dlg.chosen_level(), dlg.chosen_designator(), dlg.values(), dlg.note_text())
@@ -610,7 +617,8 @@ class MainWindow(QMainWindow):
         position = {"panel": (x, y), "board": (rel[1], rel[2]) if rel else None}
         where = f"circuit {rel[0]}, X {rel[1]:.3f} Y {rel[2]:.3f}" if rel else f"panel X {x:.3f} Y {y:.3f}"
         level = "board" if rel else "panel"
-        add = menu.addAction(f"Add component here ({where})…", lambda: self.add_component(level, position))
+        design = next((c.design for c in a.circuits if rel and c.index == rel[0]), "")
+        add = menu.addAction(f"Add component here ({where})…", lambda: self.add_component(level, position, design))
         add.setEnabled(not ro)
         return menu
 

@@ -294,29 +294,39 @@ class PanelCanvas(QGraphicsView):
         font = QFont()
         font.setBold(True)
         font.setPointSize(14)
+        small = QFont()
+        small.setPointSize(8)
         for c in a.circuits:
             item = QGraphicsPathItem(polygon_path(c.outline))
             pen = QPen(self._color("circuit_outlines"), 1.2, Qt.DashLine)
             pen.setCosmetic(True)
             item.setPen(pen)
-            item.setToolTip(self._circuit_tip(c))
+            item.setToolTip(self._circuit_tip(a, c))
             self._add("circuit_outlines", item)
-            label = QGraphicsSimpleTextItem(str(c.index))
-            label.setFont(font)
-            label.setBrush(self._color("circuit_outlines"))
-            label.setFlag(QGraphicsItem.ItemIgnoresTransformations)
-            br = label.boundingRect()
-            label.setPos(QPointF(*c.center))
-            label.setTransformOriginPoint(br.center())
-            label.setTransform(QTransform.fromTranslate(-br.width() / 2, -br.height() / 2))
-            self._add("circuit_outlines", label)
+            # The circuit number, and its design just below it.
+            below = 0.0
+            for text, f in ((str(c.index), font), (c.design or a.board_step or "", small)):
+                if not text:
+                    continue
+                label = QGraphicsSimpleTextItem(text)
+                label.setFont(f)
+                label.setBrush(self._color("circuit_outlines"))
+                label.setFlag(QGraphicsItem.ItemIgnoresTransformations)
+                br = label.boundingRect()
+                label.setPos(QPointF(*c.center))
+                label.setTransformOriginPoint(br.center())
+                top = -br.height() / 2 if not below else below
+                label.setTransform(QTransform.fromTranslate(-br.width() / 2, top))
+                below = br.height() / 2  # in screen pixels: the next label starts under this one
+                self._add("circuit_outlines", label)
+            self._add("circuit_outlines", self._orientation_mark(a, c))
 
         # Component bodies, one path per circuit and side
         for c in a.circuits:
             for side in ("top", "bottom"):
                 path = QPainterPath()
                 for p in a.placements:
-                    if p.layer != side:
+                    if p.layer != side or not a.places(c, p):
                         continue
                     for poly in p.body:
                         path.addPath(polygon_path(poly))
@@ -336,6 +346,8 @@ class PanelCanvas(QGraphicsView):
         snap = []
         for c in a.circuits:
             for p in a.placements:
+                if not a.places(c, p):
+                    continue
                 x, y, rot = a.circuit_position(p, c)
                 layer = "centroids_top" if p.layer == "top" else "centroids_bottom"
                 m = MarkerItem("placement", (p.designator, c.index), self._color(layer), p.designator, rot, p.state)
@@ -345,6 +357,8 @@ class PanelCanvas(QGraphicsView):
                 self._markers.append(m)
                 snap.append((x, y))
             for p in a.removed_placements:
+                if not a.places(c, p):
+                    continue
                 x, y, rot = a.circuit_position(p, c)
                 m = MarkerItem("placement", (p.designator, c.index), self._color("removed"), p.designator, None, "removed")
                 m.setPos(x, y)
@@ -387,17 +401,34 @@ class PanelCanvas(QGraphicsView):
             snap.append((f.x, f.y))
         self._snap = np.array(snap, dtype=float).reshape(-1, 2)
 
+    def _orientation_mark(self, a: PanelAnalysis, c) -> QGraphicsPathItem:
+        """An L at the circuit's reference point along its board's +X (long arm) and +Y:
+        shows where each circuit is measured from and how it is turned."""
+        rx, ry = a.reference_of(c.design)
+        arm = max(min(c.size) / 8, 1.0) if min(c.size) > 0 else 2.0
+        path = QPainterPath(QPointF(*c.transform.apply(rx + arm, ry)))
+        path.lineTo(QPointF(*c.transform.apply(rx, ry)))
+        path.lineTo(QPointF(*c.transform.apply(rx, ry + arm / 2)))
+        item = QGraphicsPathItem(path)
+        pen = QPen(self._color("circuit_outlines"), 2.0)
+        pen.setCosmetic(True)
+        item.setPen(pen)
+        item.setToolTip(f"Circuit {c.index}: reference point and the board's +X (long arm) and +Y")
+        item.setAcceptedMouseButtons(Qt.NoButton)
+        return item
+
     @staticmethod
-    def _circuit_tip(c) -> str:
+    def _circuit_tip(a: PanelAnalysis, c) -> str:
         res = "" if c.residual is None else f"<br>Fit residual {c.residual:.4f} mm"
+        design = c.design or a.board_step
         return (
-            f"<b>Circuit {c.index}</b><br>ΔX {c.dx:.3f}  ΔY {c.dy:.3f} mm<br>Rotation {c.rotation:.3f}°"
-            f"{' (mirrored)' if c.mirror else ''}<br>Source {c.source}{res}"
+            f"<b>Circuit {c.index}</b>{f' — {design}' if design else ''}<br>ΔX {c.dx:.3f}  ΔY {c.dy:.3f} mm"
+            f"<br>Rotation {c.rotation:.3f}°{' (mirrored)' if c.mirror else ''}<br>Source {c.source}{res}"
         )
 
     @staticmethod
     def _placement_tip(a: PanelAnalysis, p, c, x: float, y: float, rot: float) -> str:
-        rx, ry = a.reference_board
+        rx, ry = a.reference_of(p.design)
         pn = f"<br>Part number {p.part_number}" if p.part_number else ""
         status = status_text(p)
         return (
