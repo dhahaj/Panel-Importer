@@ -124,8 +124,62 @@ class Settings:
         return write_settings_file(path, data)
 
 
+#: Key of the component-database section in the settings file.
+DATABASE_KEY = "database"
+
+
+@dataclass
+class DatabaseSettings:
+    """Where the JaNets component database is.  Per PC, so it is kept out of the copy of
+    the settings a project stores."""
+
+    # The component database (.mdb) whose Compo table is read; empty = not used.
+    path: str = ""
+
+    def to_dict(self) -> dict:
+        return to_jsonable(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> DatabaseSettings:
+        return from_jsonable(cls, data, f"${DATABASE_KEY}")
+
+    @classmethod
+    def load(cls, path: str | os.PathLike | None = None) -> DatabaseSettings:
+        """The ``database`` section; a missing file or section gives the defaults."""
+        section = read_section(DATABASE_KEY, path)
+        return cls() if section is None else cls.from_dict(section)
+
+    def save(self, path: str | os.PathLike | None = None) -> Path:
+        """Write the ``database`` section, keeping the rest of the settings file as it is."""
+        return write_section(DATABASE_KEY, self.to_dict(), path)
+
+
 #: Sections of the settings file that belong to other parts of the program.
-OTHER_SECTIONS = frozenset({"iss"})
+OTHER_SECTIONS = frozenset({"iss", DATABASE_KEY})
+
+
+def read_section(key: str, path: str | os.PathLike | None = None) -> dict | None:
+    """One section of the settings file; None when the file or the section is missing."""
+    path = Path(path) if path else default_settings_path()
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as fh:
+        try:
+            data = json.load(fh)
+        except json.JSONDecodeError as exc:
+            raise SerializationError(f"{path}: invalid JSON: {exc}") from None
+    return data.get(key) if isinstance(data, dict) else None
+
+
+def write_section(key: str, section: dict, path: str | os.PathLike | None = None) -> Path:
+    """Write one section of the settings file, keeping the rest as it is."""
+    path = Path(path) if path else default_settings_path()
+    data = {}
+    if path.exists():
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    data[key] = section
+    return write_settings_file(path, data)
 
 
 def write_settings_file(path: Path, data: dict) -> Path:

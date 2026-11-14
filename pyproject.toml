@@ -12,6 +12,8 @@ dependencies = [
     "numpy>=1.26",
     "shapely>=2.0",
     "unlzw3>=0.2.2",
+    # The JaNets component database is read through the Access ODBC driver (Windows only).
+    "pyodbc>=5.1; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

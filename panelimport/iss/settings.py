@@ -8,7 +8,6 @@ lists every value used.
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -115,30 +114,16 @@ class IssSettings:
     @classmethod
     def load(cls, path: str | os.PathLike | None = None) -> IssSettings:
         """The ``iss`` section of the settings file; a missing file or section gives the defaults."""
-        from panelimport.settings import default_settings_path
+        from panelimport.settings import read_section
 
-        path = Path(path) if path else default_settings_path()
-        if not path.exists():
-            return cls()
-        with open(path, encoding="utf-8") as fh:
-            try:
-                data = json.load(fh)
-            except json.JSONDecodeError as exc:
-                raise SerializationError(f"{path}: invalid JSON: {exc}") from None
-        section = data.get(ISS_KEY) if isinstance(data, dict) else None
+        section = read_section(ISS_KEY, path)
         return cls() if section is None else cls.from_dict(section)
 
     def save(self, path: str | os.PathLike | None = None) -> Path:
         """Write the ``iss`` section, keeping the rest of the settings file as it is."""
-        from panelimport.settings import default_settings_path, write_settings_file
+        from panelimport.settings import write_section
 
-        path = Path(path) if path else default_settings_path()
-        data = {}
-        if path.exists():
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-        data[ISS_KEY] = self.to_dict()
-        return write_settings_file(path, data)
+        return write_section(ISS_KEY, self.to_dict(), path)
 
     # ------------------------------------------------------------------ overrides
     def with_overrides(self, pairs: list[str]) -> IssSettings:
