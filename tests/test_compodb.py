@@ -25,11 +25,7 @@ def _readable() -> str | None:
     """Why the fixture database cannot be read here, or None."""
     if not DETEX.exists():
         return "tests/fixtures/DETEX.mdb is not there"
-    try:
-        compodb._driver(compodb._pyodbc())
-    except DatabaseError as exc:
-        return str(exc)
-    return None
+    return compodb.unavailable() or None
 
 
 needs_database = pytest.mark.skipif(_readable() is not None, reason=_readable() or "")
@@ -109,6 +105,7 @@ def test_no_driver(tmp_path, monkeypatch):
     monkeypatch.setattr(compodb, "_pyodbc", lambda: FakeOdbc)
     with pytest.raises(DatabaseError, match="Access Database Engine"):
         read_database(db)
+    assert "Access Database Engine" in compodb.unavailable()
 
 
 # ---------------------------------------------------------------------- the snapshot

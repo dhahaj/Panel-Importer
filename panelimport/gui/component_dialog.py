@@ -1,4 +1,5 @@
-"""Dialogs for component edits: add or edit a component, and review a removal.
+"""Dialogs for component edits: add or edit a component, pick its part number from the
+component database, and review a removal.
 
 Coordinates are the ones the components table shows: circuit-relative for board-level
 components (placed in every circuit), panel coordinates for panel-level components.
@@ -6,6 +7,8 @@ Sizes are in the part's own frame (rotation 0); 0 is unknown.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -30,6 +33,7 @@ from PySide6.QtWidgets import (
 from panelimport.analysis.edits import EPS, REASON_LABELS, TEXT_FIELDS, all_parts, find_part, natural_key, shown_values
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.analysis.transforms import angle_diff
+from panelimport.model.database import ComponentDatabase, DatabasePart
 from panelimport.model.panel import SIZE_FIELDS
 
 Key = tuple[str, str]
@@ -67,9 +71,13 @@ class ComponentDialog(QDialog):
         level: str = "board",
         position: dict[str, tuple[float, float] | None] | None = None,
         design: str = "",
+        database: Callable[[], ComponentDatabase | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.a = analysis
+        # Gives the whole component database for "From database…" (read on first use).
+        self.database = database
+        self.picked: ComponentDatabase | None = None  # the database a part number was picked from
         self.design = design  # where a part is added on a panel of several designs
         self.keys = list(keys or [])
         self.mode = "add" if not self.keys else ("one" if len(self.keys) == 1 else "many")
@@ -105,6 +113,13 @@ class ComponentDialog(QDialog):
         )
         self.size_note.setWordWrap(True)
         self.size_note.setStyleSheet(HINT_STYLE)
+        self.database_note = QLabel("")
+        self.database_note.setWordWrap(True)
+        self.database_note.setStyleSheet(HINT_STYLE)
+        self.pick_btn = QPushButton("From database…")
+        self.pick_btn.setToolTip("Choose the part number from the component database (searches part numbers and descriptions)")
+        self.pick_btn.setEnabled(database is not None)
+        self.pick_btn.clicked.connect(self._pick)
         self.note = QLineEdit()
         self.note.setPlaceholderText("optional: why, for the record")
         self.frame = QLabel("")
@@ -144,11 +159,15 @@ class ComponentDialog(QDialog):
             ("Y", "y"),
             ("Rotation (CCW)", "rotation"),
         ):
-            form.addRow(label, self._with_hint(field))
+            row = self._with_hint(field)
+            if field == "part_number":
+                row.layout().insertWidget(1, self.pick_btn)
+            form.addRow(label, row)
         form.addRow("", self.frame)
         for label, field in (("Width (X)", "width"), ("Length (Y)", "length"), ("Height", "height")):
             form.addRow(label, self._with_hint(field))
         form.addRow("", self.size_note)
+        form.addRow("", self.database_note)
         form.addRow("Note", self.note)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -170,6 +189,9 @@ class ComponentDialog(QDialog):
             )
             signal.connect(lambda *_a: self._refresh_hints())
         self.level.currentIndexChanged.connect(self._level_changed)
+        for line in (self.part_number, self.part_name):
+            line.textChanged.connect(lambda *_a: self._refresh_database_note())
+        self._refresh_database_note()
         self._refresh_hints()
         self._show_frame()
         self.setMinimumWidth(460)
@@ -268,6 +290,38 @@ class ComponentDialog(QDialog):
             self.hints[field].setVisible(differs)
             self.resets[field].setVisible(differs)
 
+    def _lookup_name(self) -> str:
+        """The name the component database is searched for: the part number, else the part name."""
+        return self._get("part_number") or (self._get("part_name") if self.mode != "many" else "")
+
+    def _refresh_database_note(self) -> None:
+        db = self.picked or self.a.decisions.component_database
+        name = self._lookup_name()
+        if db is None or not name:
+            self.database_note.hide()
+            return
+        record = db.find(name)
+        if record is None:
+            self.database_note.setText(f"{name}: {db.state(name)} in the component database ({db.label}).")
+        else:
+            size = " × ".join(f"{getattr(record, f):g}" if getattr(record, f) else "?" for f in SIZE_FIELDS)
+            description = record.description or "(no description)"
+            self.database_note.setText(
+                f"Component database: {description}; size {size} mm (the program's, in the machine's "
+                "frame, unless a size is edited here)."
+            )
+        self.database_note.show()
+
+    def _pick(self) -> None:
+        db = self.database() if self.database is not None else None
+        if db is None:
+            return
+        dlg = DatabasePicker(self, db, self._lookup_name())
+        if dlg.exec() and dlg.chosen() is not None:
+            self.picked = db
+            self.part_number.setText(dlg.chosen().name)
+            self._refresh_database_note()
+
     def _revert_all(self) -> None:
         for field in self.editors:
             self._set(field, self.export[field])
@@ -358,6 +412,76 @@ class ComponentDialog(QDialog):
             self.error.show()
             return
         super().accept()
+
+
+class DatabasePicker(QDialog):
+    """Choose a component of the component database; its name becomes the part number."""
+
+    COLUMNS = ["Part number", "Description", "Juki package", "Width", "Length", "Height"]
+
+    def __init__(self, parent: QWidget | None, database: ComponentDatabase, text: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Component database — {database.label}")
+        self.parts = sorted(database.parts, key=lambda p: natural_key(p.name))
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search part number or description…")
+        self.search.setClearButtonEnabled(True)
+        self.table = QTableWidget(len(self.parts), len(self.COLUMNS))
+        self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        for r, p in enumerate(self.parts):
+            sizes = [f"{getattr(p, f):.4g}" if getattr(p, f) else "-" for f in SIZE_FIELDS]
+            for c, cell in enumerate([p.name, p.description, p.pkg_type, *sizes]):
+                item = QTableWidgetItem(cell)
+                if c >= 3:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.table.setItem(r, c, item)
+        self.table.resizeColumnsToContents()
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.doubleClicked.connect(lambda _i: self.accept())
+        self.count = QLabel("")
+        self.count.setStyleSheet(HINT_STYLE)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        self.ok = buttons.button(QDialogButtonBox.Ok)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.search)
+        layout.addWidget(self.table)
+        layout.addWidget(self.count)
+        layout.addWidget(buttons)
+        self.table.itemSelectionChanged.connect(lambda: self.ok.setEnabled(self.chosen() is not None))
+        self.search.setText(text.strip())
+        self._filter()
+        if text.strip() and not self._visible_rows():
+            self.search.clear()  # nothing like the current part number: show everything
+            self._filter()
+        self.search.textChanged.connect(self._filter)
+        self.resize(820, 480)
+        self.search.setFocus()
+
+    def _visible_rows(self) -> list[int]:
+        return [r for r in range(len(self.parts)) if not self.table.isRowHidden(r)]
+
+    def _filter(self) -> None:
+        text = self.search.text().strip().lower()
+        for r, p in enumerate(self.parts):
+            self.table.setRowHidden(r, bool(text) and text not in p.name.lower() and text not in p.description.lower())
+        visible = self._visible_rows()
+        exact = next((r for r in visible if self.parts[r].name.lower() == text), None)
+        if visible:
+            self.table.selectRow(exact if exact is not None else visible[0])
+        else:
+            self.table.clearSelection()
+        self.count.setText(f"{len(visible)} of {len(self.parts)} components")
+        self.ok.setEnabled(self.chosen() is not None)
+
+    def chosen(self) -> DatabasePart | None:
+        rows = [i.row() for i in self.table.selectionModel().selectedRows() if not self.table.isRowHidden(i.row())]
+        return self.parts[rows[0]] if rows else None
 
 
 class RemoveDialog(QDialog):

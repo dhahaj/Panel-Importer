@@ -2,7 +2,9 @@
 
 Sortable, filterable and searchable; pick the attribute that holds the part number.
 Components can be added, edited, removed (not placed) and restored; edited values are
-coloured, with the export's value in the tooltip, and removed ones are greyed.
+coloured, with the export's value in the tooltip, and removed ones are greyed.  With a
+component database, sizes are the ones the program is written with (database sizes in
+blue) and its description, Juki package and whether it has the part are shown.
 """
 
 from __future__ import annotations
@@ -23,27 +25,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from panelimport.analysis.database import database_summary, part_database
 from panelimport.analysis.edits import SUGGESTIONS, all_parts, shown_values, status_text, suggest_removals
 from panelimport.analysis.result import PanelAnalysis
+from panelimport.components_csv import COLUMNS as CSV_COLUMNS
 from panelimport.gui import theme
+from panelimport.model.panel import SIZE_FIELDS
 
-COLUMNS = [
-    "Designator",
-    "Level",
-    "Part name",
-    "Part number",
-    "Package",
-    "Side",
-    "X (mm)",
-    "Y (mm)",
-    "Rotation (°)",
-    "Width (mm)",
-    "Length (mm)",
-    "Height (mm)",
-    "Paste check",
-    "Status",
-]
-COL_DESIGNATOR, COL_LEVEL, COL_SIDE, COL_X, COL_STATUS = 0, 1, 5, 6, 13
+COLUMNS = list(CSV_COLUMNS)  # the CSV export writes what the table lists
+COL_DESIGNATOR, COL_LEVEL, COL_SIDE, COL_X = 0, 1, 5, 6
+COL_DESCRIPTION, COL_PKG_TYPE, COL_DATABASE, COL_STATUS = 12, 13, 14, 16
 FIELD_COLUMNS = {
     "part_name": 2, "part_number": 3, "package": 4, "layer": 5, "x": 6, "y": 7, "rotation": 8,
     "width": 9, "length": 10, "height": 11,
@@ -121,6 +112,7 @@ class ComponentsPanel(QWidget):
     restoreRequested = Signal(list)
     revertRequested = Signal(list)
     suggestRequested = Signal(str)  # a key of analysis.edits.SUGGESTIONS
+    databaseUpdateRequested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -176,6 +168,12 @@ class ComponentsPanel(QWidget):
         self.act_revert = self._action(
             "Revert", "Back to the export's values for the selected components", None, lambda: self._emit(self.revertRequested)
         )
+        self.act_database = self._action(
+            "Update from database",
+            "Read the component database again and look every component up in it (Edit → Settings sets where it is)",
+            None,
+            self.databaseUpdateRequested.emit,
+        )
         self.suggest_menu = QMenu("Find", self)
         self.suggest_actions: dict[str, QAction] = {}
         for kind, label in SUGGESTIONS.items():
@@ -194,6 +192,9 @@ class ComponentsPanel(QWidget):
             buttons.addWidget(btn)
         buttons.addWidget(self.suggest_btn)
         buttons.addStretch(1)
+        database_btn = QToolButton()
+        database_btn.setDefaultAction(self.act_database)
+        buttons.addWidget(database_btn)
 
         top = QHBoxLayout()
         top.addWidget(self.search, 1)
@@ -219,6 +220,7 @@ class ComponentsPanel(QWidget):
         self.mapping.activated.connect(self._mapping_chosen)
         self._updating = False
         self._read_only = True
+        self._database = False  # a component database is configured
         self._update_actions()
 
     def _action(self, text: str, tip: str, shortcut, slot) -> QAction:
@@ -319,6 +321,11 @@ class ComponentsPanel(QWidget):
         self.act_restore.setEnabled(editable and "removed" in states)
         self.act_revert.setEnabled(editable and "edited" in states)
         self.suggest_btn.setEnabled(editable)
+        self.act_database.setEnabled(editable and self._database)
+
+    def set_database_available(self, available: bool) -> None:
+        self._database = available
+        self._update_actions()
 
     # ------------------------------------------------------------------ content
     def set_analysis(self, a: PanelAnalysis | None, read_only: bool = False) -> None:
@@ -366,6 +373,8 @@ class ComponentsPanel(QWidget):
     def _row(self, a: PanelAnalysis, level: str, part) -> list[QStandardItem]:
         values = shown_values(a, part)
         export = shown_values(a, part, export=True) if part.export else {}
+        db = part_database(a, part)
+        record = db.record
         cells: list[object] = [
             part.designator,
             level,
@@ -376,9 +385,10 @@ class ComponentsPanel(QWidget):
             values["x"],
             values["y"],
             values["rotation"],
-            values["width"],
-            values["length"],
-            values["height"],
+            *(db.sizes[f] for f in SIZE_FIELDS),
+            record.description if record else "",
+            record.pkg_type if record else "",
+            db.state,
             (part.paste.describe() if part.paste else "-") if level == "board" else "",
             status_text(part),
         ]
@@ -407,6 +417,12 @@ class ComponentsPanel(QWidget):
                 row[col].setForeground(QBrush(theme.EDITED))
             shown = _number(col, old) if col in NUMERIC else (old or "(empty)")
             row[col].setToolTip(f"Export: {shown}")
+        for f in db.from_database:
+            col = FIELD_COLUMNS[f]
+            if part.state != "removed":
+                row[col].setForeground(QBrush(theme.DATABASE))
+            exported = export[f] if f in part.export else values[f]
+            row[col].setToolTip(f"From the component database; export: {_number(col, exported)}")
         if part.state == "edited":
             row[COL_STATUS].setForeground(QBrush(theme.EDITED))
         if part.edit is not None and part.edit.note:
@@ -423,6 +439,9 @@ class ComponentsPanel(QWidget):
             n = sum(1 for _lv, p in parts if p.state == state)
             if n:
                 text += f" · {n} {state}"
+        database = database_summary(a)
+        if database:
+            text += f" · database {database}"
         return text
 
 

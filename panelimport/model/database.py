@@ -18,7 +18,7 @@ from functools import cached_property
 #: Component size fields (mm, 0 = unknown); :mod:`panelimport.model.panel` uses them too.
 SIZE_FIELDS = ("width", "length", "height")
 #: What the database says about a component name.
-FOUND, MISSING, NOT_LOOKED_UP = "found", "missing", "not looked up"
+FOUND, MISSING, NOT_LOOKED_UP = "found", "not found", "not looked up"
 
 
 @dataclass

@@ -1,9 +1,11 @@
 """The components as a CSV file: what the GUI's components table lists.
 
 One row per component: circuit 1's placements (X/Y circuit-relative) and the panel-level
-parts (X/Y in panel coordinates), with the component edits applied.  Removed components
-are included; their Status column says so.  Used by both the CLI and the GUI.  Never
-imports Qt.
+parts (X/Y in panel coordinates), with the component edits applied.  Sizes are the ones
+the program is written with (edited, else the component database's, else the export's),
+and the database's description, Juki package and whether it has the part follow them.
+Removed components are included; their Status column says so.  Used by both the CLI
+and the GUI.  Never imports Qt.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import csv
 import os
 
+from panelimport.analysis.database import part_database
 from panelimport.analysis.edits import all_parts, natural_key, shown_values, status_text
 from panelimport.analysis.result import PanelAnalysis, r6
 from panelimport.model.panel import SIZE_FIELDS
@@ -31,6 +34,9 @@ COLUMNS = (
     "Width (mm)",
     "Length (mm)",
     "Height (mm)",
+    "Description",
+    "Juki package",
+    "Database",
     "Paste check",
     "Status",
 )
@@ -46,6 +52,8 @@ def component_rows(a: PanelAnalysis) -> list[list[str]]:
     rows = []
     for level, part in sorted(all_parts(a), key=lambda lp: (lp[0], natural_key(lp[1].designator))):
         values = shown_values(a, part)
+        db = part_database(a, part)
+        record = db.record
         rows.append(
             [
                 part.designator,
@@ -57,7 +65,10 @@ def component_rows(a: PanelAnalysis) -> list[list[str]]:
                 _number(values["x"]),
                 _number(values["y"]),
                 _number(values["rotation"]),
-                *(_number(values[f]) if values[f] else "" for f in SIZE_FIELDS),  # empty: unknown
+                *(_number(db.sizes[f]) if db.sizes[f] else "" for f in SIZE_FIELDS),  # empty: unknown
+                record.description if record else "",
+                record.pkg_type if record else "",
+                db.state,
                 (part.paste.describe() if part.paste else "-") if level == "board" else "",
                 status_text(part),
             ]

@@ -51,7 +51,8 @@ ISSUE_MARK = _c("#ff453a")
 
 SEVERITY_COLOR = {"error": _c("#ff453a"), "warning": _c("#ffb000"), "info": _c("#58a6ff")}
 
-# Components table: what the user changed.
+# Components table: what the user changed, and sizes the component database gives.
 EDITED = _c("#ffb000")
 ADDED = _c("#3fb950")
 REMOVED = _c("#8b949e")
+DATABASE = _c("#58a6ff")

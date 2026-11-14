@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from panelimport import __version__
 from panelimport.analysis import edits
+from panelimport.analysis.database import database_summary
 from panelimport.analysis.fiducials import MAX_PANEL_FIDUCIALS
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.components_csv import COMPONENTS_SUFFIX, write_components_csv
@@ -44,22 +45,28 @@ from panelimport.gui.panels.summary import SummaryBar
 from panelimport.gui.settings_dialog import SettingsDialog
 from panelimport.gui.single_board_dialog import SingleBoardDialog
 from panelimport.io.bom import BomError, read_bom
+from panelimport.io.compodb import DatabaseError, read_database
 from panelimport.io.odb import OdbJob, OdbOpenError
 from panelimport.iss.settings import IssSettings
 from panelimport.iss.writer import default_iss_path, project_stem
+from panelimport.model.database import ComponentDatabase
 from panelimport.model.issues import Issue
 from panelimport.model.panel import Acknowledgement, Decisions
 from panelimport.model.project_file import PROJECT_SUFFIX, ProjectFileError, default_project_path
 from panelimport.model.serialize import SerializationError
 from panelimport.session import SessionError
-from panelimport.settings import Settings
+from panelimport.settings import DatabaseSettings, Settings
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, qsettings: QSettings | None = None) -> None:
+    def __init__(
+        self, settings: Settings, qsettings: QSettings | None = None, database: DatabaseSettings | None = None
+    ) -> None:
         super().__init__()
         self.qsettings = qsettings or QSettings()
         self.settings = settings
+        self.database = database or DatabaseSettings()
+        self._library: ComponentDatabase | None = None  # the component database as last read
         self.controller = Controller(settings, self)
         self.setWindowTitle("Panel Importer")
         self.resize(1400, 900)
@@ -162,6 +169,11 @@ class MainWindow(QMainWindow):
         self.act_add_component = self._action(
             "&Add component…", lambda: self.add_component(), tip="Add a component the export does not have"
         )
+        self.act_update_database = self._action(
+            "Update from component &database",
+            self.update_database,
+            tip="Read the component database again and look every component up in it",
+        )
         self.suggest_menu = QMenu("Remove &suggested components", self)
         self.suggest_actions: dict[str, QAction] = {}
         for kind, label in edits.SUGGESTIONS.items():
@@ -181,6 +193,7 @@ class MainWindow(QMainWindow):
         for a in (self.act_undo, self.act_redo, None, self.act_roles, self.act_confirm, None, self.act_add_component):
             m.addSeparator() if a is None else m.addAction(a)
         m.addMenu(self.suggest_menu)
+        m.addAction(self.act_update_database)
         m.addSeparator()
         m.addAction(self.act_settings)
         m = self.menuBar().addMenu("&View")
@@ -227,6 +240,8 @@ class MainWindow(QMainWindow):
         self.components_panel.restoreRequested.connect(self.restore_components)
         self.components_panel.revertRequested.connect(self.revert_components)
         self.components_panel.suggestRequested.connect(self.suggest_removals)
+        self.components_panel.databaseUpdateRequested.connect(self.update_database)
+        self.components_panel.set_database_available(bool(self.database.path))
         self.fiducials_panel.acceptRequested.connect(self.accept_fiducial)
         self.fiducials_panel.removeRequested.connect(self.remove_fiducial)
         self.fiducials_panel.fiducialSelected.connect(self._fiducial_selected)
@@ -268,6 +283,7 @@ class MainWindow(QMainWindow):
         self.act_export_iss.setEnabled(a is not None and (ro or a.confirmed))
         self.act_confirm.setEnabled(has and a.can_confirm()[0] and not a.confirmed)
         self.act_add_component.setEnabled(has)
+        self.act_update_database.setEnabled(has and bool(self.database.path))
         self.suggest_menu.setEnabled(has)
         if has:
             found = edits.suggest_removals(a)
@@ -469,11 +485,16 @@ class MainWindow(QMainWindow):
             self.controller.apply("Single-board setup", single_board=dlg.result_setup)
 
     # ------------------------------------------------------------------ component edits
-    def _set_component_edits(self, text: str, new: list) -> None:
+    def _set_component_edits(self, text: str, new: list, database: ComponentDatabase | None = None) -> None:
+        """Apply component edits; ``database`` is one a part number was just picked from,
+        which the components are then looked up in (one undo step)."""
         a = self.analysis
-        if a is None or self.controller.read_only or new == a.component_edits:
+        if a is None or self.controller.read_only:
             return
-        self.controller.apply(text, component_edits=new, edit_frame=a.edit_frame)
+        if database is not None and database is not a.decisions.component_database:
+            self.controller.update_database(database, text, component_edits=new, edit_frame=a.edit_frame)
+        elif new != a.component_edits:
+            self.controller.apply(text, component_edits=new, edit_frame=a.edit_frame)
 
     @staticmethod
     def _names(keys) -> str:
@@ -484,11 +505,11 @@ class MainWindow(QMainWindow):
         a = self.analysis
         if a is None or self.controller.read_only:
             return
-        dlg = ComponentDialog(self, a, level=level, position=position, design=design)
+        dlg = ComponentDialog(self, a, level=level, position=position, design=design, database=self._picker_database())
         if not dlg.exec() or dlg.validate():
             return
         new = edits.added_edit(dlg.chosen_level(), dlg.chosen_designator(), dlg.values(), dlg.note_text())
-        self._set_component_edits(f"Add {new.designator}", edits.set_edits(a.component_edits, [new]))
+        self._set_component_edits(f"Add {new.designator}", edits.set_edits(a.component_edits, [new]), dlg.picked)
         self.tabs.setCurrentWidget(self.components_panel)
         self.components_panel.select_designator(new.designator, new.level)
         self._component_selected(new.designator, new.level)
@@ -498,7 +519,7 @@ class MainWindow(QMainWindow):
         keys = [tuple(k) for k in keys if edits.find_part(a, *k) is not None] if a is not None else []
         if not keys or self.controller.read_only:
             return
-        dlg = ComponentDialog(self, a, keys)
+        dlg = ComponentDialog(self, a, keys, database=self._picker_database())
         if not dlg.exec() or dlg.validate():
             return
         values, note = dlg.values(), dlg.note_text()
@@ -517,7 +538,7 @@ class MainWindow(QMainWindow):
                 drop.append(key)
             else:
                 new.append(e)
-        self._set_component_edits(f"Edit {self._names(keys)}", edits.set_edits(a.component_edits, new, drop))
+        self._set_component_edits(f"Edit {self._names(keys)}", edits.set_edits(a.component_edits, new, drop), dlg.picked)
 
     def remove_components(self, keys: list, reason: str = "through-hole", why: dict | None = None, title: str = "") -> None:
         """Review and remove (not place) components; ``why`` explains each one in the dialog."""
@@ -552,6 +573,46 @@ class MainWindow(QMainWindow):
         if a is not None:
             keys = [tuple(k) for k in keys]
             self._set_component_edits(f"Revert {self._names(keys)} to the export", edits.revert_parts(a.component_edits, keys))
+
+    # ------------------------------------------------------------------ component database
+    def _read_database(self) -> ComponentDatabase | None:
+        """Read the configured component database (a copy of it); None, with a message,
+        when it cannot be read."""
+        self.controller._busy()
+        try:
+            self._library = read_database(self.database.path)
+        except DatabaseError as exc:
+            self.controller._idle()
+            QMessageBox.warning(self, "Component database", str(exc))
+            return None
+        self.controller._idle()
+        return self._library
+
+    def _picker_database(self):
+        """What "From database…" chooses from: the whole database, read on first use; None
+        when there is none."""
+        a = self.analysis
+        known = a.decisions.component_database if a is not None else None
+        if known is not None and known.whole:
+            return lambda: known
+        if not self.database.path:
+            return None
+        return lambda: self._library or self._read_database()
+
+    def update_database(self) -> None:
+        a = self.analysis
+        if a is None or self.controller.read_only:
+            return
+        if not self.database.path:
+            QMessageBox.information(
+                self, "Component database", "Set where the component database is in Edit → Settings first."
+            )
+            return
+        db = self._read_database()
+        if db is None:
+            return
+        self.controller.update_database(db)
+        self.statusBar().showMessage(f"Component database {database_summary(self.analysis)}", 8000)
 
     def suggest_removals(self, kind: str) -> None:
         a = self.analysis
@@ -641,8 +702,11 @@ class MainWindow(QMainWindow):
             self.open_job(dlg.job, Decisions(panel_step=panel, board_step=board, layer_roles=dlg.layer_roles()))
 
     def open_job(self, job: OdbJob, decisions: Decisions) -> None:
-        self.controller.open_job(job, decisions)
-        self.statusBar().showMessage(f"Imported {job.path}", 5000)
+        a = self.controller.open_job(job, decisions, self.database.path or None)
+        if a.decisions.component_database is not None:
+            self._library = a.decisions.component_database
+        database = database_summary(a)
+        self.statusBar().showMessage(f"Imported {job.path}" + (f"; component database {database}" if database else ""), 8000)
 
     def open_path(self, path: str) -> None:
         """Open an ODB++ export or a project file given on the command line."""
@@ -783,11 +847,16 @@ class MainWindow(QMainWindow):
         CompareDialog(self.qsettings, self).exec()
 
     def edit_settings(self) -> None:
-        dlg = SettingsDialog(self.controller.session.settings, self)
+        dlg = SettingsDialog(self.controller.session.settings, self, self.database)
         if dlg.exec():
             self.settings = dlg.settings
+            if dlg.database != self.database:
+                self.database, self._library = dlg.database, None
+                self.components_panel.set_database_available(bool(self.database.path))
+                self._update_actions()
             try:
                 dlg.settings.save()
+                dlg.database.save()
             except OSError as exc:
                 QMessageBox.warning(self, "Settings", f"Settings applied but not saved: {exc}")
             if self.controller.session.job is not None:

@@ -4,6 +4,7 @@ import csv
 
 from panelimport.analysis import edits as E
 from panelimport.components_csv import COLUMNS, component_rows, write_components_csv
+from panelimport.model.database import ComponentDatabase, DatabasePart
 from panelimport.model.panel import Acknowledgement
 from panelimport.model.project_file import load_project
 from panelimport.session import Session
@@ -46,10 +47,29 @@ def test_every_component_once_in_designator_order(tmp_path):
     assert board == sorted(board, key=E.natural_key) and board.index("C2") < board.index("C10")
     by_name = {r["Designator"]: r for r in rows}
     assert list(by_name["C1"].values()) == [
-        "C1", "board", "CAP-100N", "D-1001", "C0603", "top", "25", "10", "270", "1.6", "0.8", "", "OK 0.000 mm", ""
-    ]  # fmt: skip  (no .comp_height: the height is unknown, left empty)
+        "C1", "board", "CAP-100N", "D-1001", "C0603", "top", "25", "10", "270", "1.6", "0.8", "", "", "", "",
+        "OK 0.000 mm", "",
+    ]  # fmt: skip  (no .comp_height: the height is unknown, left empty; no component database)
     assert by_name["C2"]["Side"] == "bottom" and by_name["J1"]["Paste check"] == "no paste"
-    assert list(by_name["FID2"].values()) == ["FID2", "panel", "FIDUCIAL", "", "FID1MM", "top", "161.5", "2.5", "0", "2", "2", "", "", ""]
+    assert list(by_name["FID2"].values()) == [
+        "FID2", "panel", "FIDUCIAL", "", "FID1MM", "top", "161.5", "2.5", "0", "2", "2", "", "", "", "", "", ""
+    ]  # fmt: skip
+
+
+def test_component_database_columns(tmp_path):
+    s = _session(tmp_path, n_parts=5)
+    s.update(part_number_attribute="PART_NUMBER")
+    db = ComponentDatabase(
+        path="DETEX.mdb", parts=[DatabasePart("D-1001", "CAP 100N 0603", "0603 Paper", 1.55, 0.85, 0.9)], whole=True
+    )
+    _, rows = _read_rows(tmp_path, s.update(component_database=db.for_names(["D-1001", "D-2002"])))
+    by_name = {r["Designator"]: r for r in rows}
+    c1, r1, u1 = by_name["C1"], by_name["R1"], by_name["U1"]
+    # Sizes as the program is written: the database's over the export's.
+    assert [c1[k] for k in ("Width (mm)", "Length (mm)", "Height (mm)")] == ["1.55", "0.85", "0.9"]
+    assert (c1["Description"], c1["Juki package"], c1["Database"]) == ("CAP 100N 0603", "0603 Paper", "found")
+    assert (r1["Description"], r1["Width (mm)"], r1["Database"]) == ("", "1", "not found")
+    assert u1["Database"] == "not looked up"  # IC-555 was not asked about
 
 
 def test_numbers_are_the_project_files(tmp_path):

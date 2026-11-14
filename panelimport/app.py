@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from panelimport.model.serialize import SerializationError
-from panelimport.settings import Settings
+from panelimport.settings import DatabaseSettings, Settings
 
 # packaging/pcb.ico; the Windows build (packaging/panelimport.spec) copies it to sys._MEIPASS.
 ICON = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / "packaging"), "pcb.ico")
@@ -84,11 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     from panelimport.gui.main_window import MainWindow
 
     try:
-        settings = Settings.load()
+        settings, database = Settings.load(), DatabaseSettings.load()
         problem = None
     except (SerializationError, ValueError, OSError) as exc:
-        settings, problem = Settings(), str(exc)
-    win = MainWindow(settings)
+        settings, database, problem = Settings(), DatabaseSettings(), str(exc)
+    win = MainWindow(settings, database=database)
     win.show()
     if problem:
         QMessageBox.warning(win, "Settings", f"Your settings file could not be read; using defaults.\n\n{problem}")

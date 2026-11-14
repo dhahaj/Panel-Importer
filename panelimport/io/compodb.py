@@ -72,6 +72,15 @@ def read_database(path: str | os.PathLike) -> ComponentDatabase:
     return ComponentDatabase(path=str(path), read_at=read_at, parts=parts, whole=True)
 
 
+def unavailable() -> str:
+    """Why no component database can be read on this PC; "" when one can."""
+    try:
+        _driver(_pyodbc())
+    except DatabaseError as exc:
+        return str(exc)
+    return ""
+
+
 def _mm(value) -> float:
     return round((value or 0) / UNITS_PER_MM, 4)
 

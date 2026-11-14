@@ -13,6 +13,7 @@ from PySide6.QtGui import QGuiApplication, QUndoCommand, QUndoStack
 from panelimport.analysis.pipeline import with_changes
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.io.odb import OdbJob
+from panelimport.model.database import ComponentDatabase
 from panelimport.model.panel import Decisions
 from panelimport.session import ReopenResult, Session
 from panelimport.settings import Settings
@@ -62,10 +63,11 @@ class Controller(QObject):
         QGuiApplication.restoreOverrideCursor()
 
     # ------------------------------------------------------------------ opening
-    def open_job(self, job: OdbJob, decisions: Decisions) -> PanelAnalysis:
+    def open_job(self, job: OdbJob, decisions: Decisions, database: str | None = None) -> PanelAnalysis:
+        """Open ``job``, looking its components up in the component database at ``database``."""
         self._busy()
         try:
-            analysis = self.session.open_job(job, decisions)
+            analysis = self.session.open_job(job, decisions, database)
         finally:
             self._idle()
         self.undo_stack.clear()
@@ -105,6 +107,11 @@ class Controller(QObject):
         if new == old:
             return
         self.undo_stack.push(DecisionCommand(self, text, old, new))
+
+    def update_database(self, database: ComponentDatabase, text: str = "Update from component database", **changes) -> None:
+        """Look the components up in ``database`` (just read), with any other ``changes``."""
+        self.session.database_read()
+        self.apply(text, component_database=database, **changes)
 
     def _set_decisions(self, decisions: Decisions) -> None:
         structural = (

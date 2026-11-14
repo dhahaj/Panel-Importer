@@ -1,22 +1,39 @@
-"""Settings: tolerances, fiducial patterns and the defaults still to be confirmed."""
+"""Settings: tolerances, fiducial patterns, the defaults still to be confirmed, and
+where the component database is."""
 
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
 )
 
-from panelimport.settings import CORNERS, ORDERS, PANEL_ORIGINS, REFERENCE_KINDS, STEP_REPEAT_ANCHORS, Settings
+from panelimport.io import compodb
+from panelimport.settings import (
+    CORNERS,
+    ORDERS,
+    PANEL_ORIGINS,
+    REFERENCE_KINDS,
+    STEP_REPEAT_ANCHORS,
+    DatabaseSettings,
+    Settings,
+)
 
 TOLERANCES = [
     ("crosscheck", "Step-repeat vs flattened copies", " mm"),
@@ -41,10 +58,11 @@ def _spin(value: float, suffix: str, decimals: int = 4, hi: float = 100.0) -> QD
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: Settings, parent=None) -> None:
+    def __init__(self, settings: Settings, parent=None, database: DatabaseSettings | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.settings = copy.deepcopy(settings)
+        self.database = copy.deepcopy(database or DatabaseSettings())
         tol_box = QGroupBox("Tolerances")
         tol = QFormLayout(tol_box)
         self.tol = {}
@@ -89,6 +107,29 @@ class SettingsDialog(QDialog):
         d.addRow("Panel origin", self.origin)
         d.addRow("STEP-REPEAT X/Y place the child's", self.anchor)
 
+        db_box = QGroupBox("Component database (JaNets)")
+        db = QFormLayout(db_box)
+        self.database_path = QLineEdit(self.database.path)
+        self.database_path.setPlaceholderText(r"e.g. C:\ComponentDatabase\Data\DETEX.mdb — empty: not used")
+        self.database_path.setToolTip(
+            "Read on import and on Update from database: a copy is read, the database itself is never opened"
+        )
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._browse_database)
+        path_row = QHBoxLayout()
+        path_row.addWidget(self.database_path, 1)
+        path_row.addWidget(browse)
+        self.database_test = QPushButton("Test")
+        self.database_test.setToolTip("Read the database now and say how many components it has")
+        self.database_test.clicked.connect(self._test_database)
+        self.database_result = QLabel(compodb.unavailable())
+        self.database_result.setWordWrap(True)
+        test_row = QHBoxLayout()
+        test_row.addWidget(self.database_test)
+        test_row.addWidget(self.database_result, 1)
+        db.addRow("Database file", path_row)
+        db.addRow("", test_row)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.RestoreDefaults)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
@@ -97,18 +138,43 @@ class SettingsDialog(QDialog):
         layout.addWidget(tol_box)
         layout.addWidget(fid_box)
         layout.addWidget(def_box)
+        layout.addWidget(db_box)
         layout.addWidget(buttons)
 
     def _defaults(self) -> None:
         fresh = SettingsDialog(Settings(), self)
         for key in self.tol:
             self.tol[key].setValue(fresh.tol[key].value())
-        for name in ("patterns", "copy_suffix", "part_number"):
+        for name in ("patterns", "copy_suffix", "part_number", "database_path"):
             getattr(self, name).setText(getattr(fresh, name).text())
         for name in ("min_d", "max_d", "clearance", "mask_margin"):
             getattr(self, name).setValue(getattr(fresh, name).value())
         for name in ("corner", "order", "reference", "origin", "anchor"):
             getattr(self, name).setCurrentText(getattr(fresh, name).currentText())
+
+    def _browse_database(self) -> None:
+        current = self.database_path.text().strip()
+        start = str(Path(current).parent) if current else r"C:\ComponentDatabase\Data"
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Component database", start, "Access databases (*.mdb *.accdb);;All files (*)"
+        )
+        if path:
+            self.database_path.setText(str(Path(path)))
+
+    def _test_database(self) -> None:
+        path = self.database_path.text().strip()
+        if not path:
+            self.database_result.setText("No database set.")
+            return
+        QGuiApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            db = compodb.read_database(path)
+        except compodb.DatabaseError as exc:
+            self.database_result.setText(str(exc))
+        else:
+            self.database_result.setText(f"{len(db.parts)} components.")
+        finally:
+            QGuiApplication.restoreOverrideCursor()
 
     def _accept(self) -> None:
         s = Settings()
@@ -131,4 +197,5 @@ class SettingsDialog(QDialog):
             QMessageBox.warning(self, "Settings", "\n".join(problems))
             return
         self.settings = s
+        self.database = DatabaseSettings(path=self.database_path.text().strip())
         self.accept()
