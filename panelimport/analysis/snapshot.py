@@ -62,7 +62,9 @@ def snapshot_from_project(project: PanelProject, issues: list[Issue] | None = No
                 design=c.design,
             )
         )
-    decisions = Decisions(single_board=project.single_board, confirmed=True)
+    decisions = Decisions(
+        single_board=project.single_board, component_database=project.component_database, confirmed=True
+    )
     a = PanelAnalysis(job=None, settings=project.settings, decisions=decisions)  # type: ignore[arg-type]
     a.mode = project.mode
     a.panel_step = project.source.panel_step

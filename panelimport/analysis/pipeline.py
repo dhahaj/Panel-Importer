@@ -28,6 +28,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from panelimport.analysis import grouping
+from panelimport.analysis.database import database_issues
 from panelimport.analysis.edits import apply_edits
 from panelimport.analysis.checks import (
     CircuitGeometry,
@@ -395,6 +396,7 @@ def analyze(
     _common_checks(a, issues)
     _fiducials(a, issues)
     _bom_check(a, issues)
+    issues += database_issues(a)
     return _finish(a, issues)
 
 
@@ -1331,6 +1333,7 @@ def decisions_from_project(project: PanelProject) -> Decisions:
         single_board=project.single_board,
         component_edits=list(project.component_edits),
         as_is=project.mode == "as-is",
+        component_database=project.component_database,
         edit_frame=EditFrame(
             mode=project.mode,
             reference=project.circuit_reference.kind,
@@ -1344,7 +1347,15 @@ def decisions_from_project(project: PanelProject) -> Decisions:
 
 #: Edits that do not change the identified panel keep an existing confirmation.
 NON_STRUCTURAL = frozenset(
-    {"fiducials", "part_number_attribute", "acknowledged", "bom_path", "component_edits", "edit_frame"}
+    {
+        "fiducials",
+        "part_number_attribute",
+        "acknowledged",
+        "bom_path",
+        "component_edits",
+        "edit_frame",
+        "component_database",
+    }
 )
 
 

@@ -32,7 +32,7 @@ from panelimport.model.project_file import ProjectFileError, check_source, load_
 from panelimport.model.serialize import SerializationError
 from panelimport.report import format_report
 from panelimport.session import Session, SessionError
-from panelimport.settings import CORNERS, ORDERS, REFERENCE_KINDS, Settings
+from panelimport.settings import CORNERS, ORDERS, REFERENCE_KINDS, DatabaseSettings, Settings
 
 
 def _settings(args: argparse.Namespace) -> Settings:
@@ -99,8 +99,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         bom_path=args.bom,
         as_is=args.as_is,
     )
+    database = args.database if args.database is not None else DatabaseSettings.load(args.settings).path
     session = Session(settings)
-    analysis = session.open_source(args.path, decisions)
+    analysis = session.open_source(args.path, decisions, database or None)
     if args.json:
         print(json.dumps(_analysis_json(analysis), indent=2, ensure_ascii=False))
     else:
@@ -185,6 +186,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--part-number-attribute", help="attribute or property holding the part number")
     p.add_argument("--panel-level", help="comma-separated designators confirmed as panel-level")
     p.add_argument("--bom", help="optional BOM CSV to cross-check designators")
+    p.add_argument(
+        "--database",
+        metavar="MDB",
+        help="JaNets component database to look the components up in (default: the settings' database; '' for none)",
+    )
     p.add_argument("--components-csv", metavar="FILE", help="also write the components to a CSV file")
     p.add_argument("--json", action="store_true", help="print JSON instead of text")
     p.add_argument("-v", "--verbose", action="store_true", help="also list the placements")

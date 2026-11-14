@@ -27,7 +27,10 @@ Angles follow the geometry: a part's angle is the direction of its rotated X axi
 a left-right flip maps θ to 180° − θ and a front-back flip maps θ to −θ.
 
 Component sizes are in the part's own frame (``witdh`` along its X axis at angle 0), so
-the panel's flip and rotation do not change them; an angle offset of ±90° does.
+the panel's flip and rotation do not change them; an angle offset of ±90° does.  Per
+dimension a size edited in Phase 1 wins, then the component database's (already in the
+machine's frame, so never turned by the angle offset), then the export's.  The comment
+is the database's description, else the first comment attribute, else the part name.
 
 **Output.** ``circuits`` writes one allocation per circuit, the encoding every reference
 program uses (allocation angle 0).  ``flatten`` writes one allocation at P holding every
@@ -46,6 +49,7 @@ from dataclasses import dataclass, field
 
 from panelimport.analysis.transforms import Transform, norm_angle
 from panelimport.iss.settings import IssSettings
+from panelimport.model.database import DatabasePart, component_name, with_database
 from panelimport.model.panel import SIZE_FIELDS, PanelProject, base_designator
 
 #: Decimals JaNets stores (``.x21`` shows ``41.7830``); every written number is rounded to it.
@@ -296,11 +300,9 @@ class IssLayout:
 _PLAIN_NAME = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 
 
-def component_name(p) -> str:
-    return (p.part_number or "").strip() or (p.part_name or "").strip()
-
-
-def component_comment(p, attributes: list[str]) -> str:
+def component_comment(p, attributes: list[str], record: DatabasePart | None = None) -> str:
+    if record is not None and record.description:
+        return record.description
     for key in attributes:
         value = (p.attributes.get(key) or "").strip()
         if value:
@@ -517,26 +519,36 @@ def _components(
     whose name fell back to the part name."""
     components: dict[str, ProgramComponent] = {}
     members: dict[str, list] = {}  # component name -> its placements
+    records: dict[str, DatabasePart | None] = {}
+    db = project.component_database
     fallbacks = []
     for p in project.placements:
         name = component_name(p)
         if not (p.part_number or "").strip() and name:
             fallbacks.append(p.designator)
         if name and name not in components:
-            components[name] = ProgramComponent(name, component_comment(p, settings.comment_attributes))
+            records[name] = db.find(name) if db is not None else None
+            components[name] = ProgramComponent(name, component_comment(p, settings.comment_attributes, records[name]))
         if name:
             members.setdefault(name, []).append(p)
     conflicts = []
     if settings.component_size == "body":
         edited = size_edits(project)
         offset = settings.angle_offset + (settings.bottom_angle_offset if machine.side == "bottom" else 0.0)
+        # Export and edited sizes are in the part's frame; an offset of ±90° swaps them.
+        turn = {"width": "length", "length": "width"} if quarter_turned(offset) else {}
         for name, comp in components.items():
             size, conflict = component_size(name, members[name], edited)
-            if quarter_turned(offset):
+            if turn:
                 size = (size[1], size[0], size[2])
+            fields = {turn.get(f, f) for p in members[name] for f in edited.get(p.designator, ())}
+            size, used = with_database(size, fields, records[name])
             comp.width, comp.length, comp.height = size
             if conflict is not None:
-                conflicts.append(conflict)
+                # A dimension the database decides is not in doubt.
+                conflict.fields = [f for f in conflict.fields if turn.get(f, f) not in used]
+                if conflict.fields:
+                    conflicts.append(conflict)
     return list(components.values()), conflicts, fallbacks
 
 

@@ -17,10 +17,12 @@ from panelimport.analysis.roles import StepDetection, detect_layer_roles
 from panelimport.analysis.transforms import GridInfo, Transform, angle_diff, ccw_from_odb, norm_angle
 from panelimport.io.bom import Bom
 from panelimport.io.odb.job import OdbJob
+from panelimport.model.database import ComponentDatabase, component_name
 from panelimport.model.issues import Issue, Severity
 from panelimport.model.panel import (
     SIZE_FIELDS,
     Acknowledgement,
+    DATABASE_VERSION,
     DESIGNS_VERSION,
     Circuit,
     CircuitReference,
@@ -401,6 +403,16 @@ class PanelAnalysis:
                 return c.index, bx - rx, by - ry
         return None
 
+    # ------------------------------------------------------------------ database
+    def database_snapshot(self) -> ComponentDatabase | None:
+        """What the component database says about this analysis's components (removed
+        ones included), as the project stores it."""
+        db = self.decisions.component_database
+        if db is None:
+            return None
+        parts = [*self.placements, *self.removed_placements, *self.panel_parts, *self.removed_panel_parts]
+        return db.for_names(component_name(p) for p in parts)
+
     # ------------------------------------------------------------------ project
     def to_project(self, project_path: str | os.PathLike | None = None) -> PanelProject:
         ref_x, ref_y = self.reference_board
@@ -413,8 +425,13 @@ class PanelAnalysis:
         if project_path is not None:
             src_path = relative_source_path(self.job.path, Path(project_path))
         origin_kind = "manual" if self.mode == "single-board" else self.settings.panel_origin
+        database = self.database_snapshot()
+        if database is not None:
+            version = DATABASE_VERSION
+        else:
+            version = DESIGNS_VERSION if self.designs else DESIGNS_VERSION - 1
         return PanelProject(
-            version=DESIGNS_VERSION if self.designs else DESIGNS_VERSION - 1,
+            version=version,
             generator=f"panelimport {__version__}",
             source=SourceInfo(
                 kind="odb++",
@@ -530,6 +547,7 @@ class PanelAnalysis:
             layer_roles=dict(sorted(self.layer_roles.items())),
             panel_level_designators=sorted(self.decisions.panel_level),
             single_board=self.decisions.single_board,
+            component_database=database,
             settings=self.settings,
         )
 

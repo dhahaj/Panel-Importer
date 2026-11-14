@@ -16,16 +16,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from panelimport.model.database import SIZE_FIELDS, ComponentDatabase
 from panelimport.settings import Settings
 
 PROJECT_FORMAT = "panel-project"
-PROJECT_VERSION = 4  # 2: component_edits, panel_parts[].part_number; 3: component sizes; 4: designs
-READABLE_VERSIONS = (1, 2, 3, 4)
+# 2: component_edits, panel_parts[].part_number; 3: component sizes; 4: designs;
+# 5: component_database
+PROJECT_VERSION = 5
+READABLE_VERSIONS = (1, 2, 3, 4, 5)
 #: The first version whose placements, panel parts and edits carry component sizes.
 SIZES_VERSION = 3
 #: The first version that can hold several designs; a project of one design is written as
 #: the version before it, which older builds read.
 DESIGNS_VERSION = 4
+#: The first version with a component-database snapshot; a project without one is written
+#: as an older version.
+DATABASE_VERSION = 5
 
 #: Why a component is not placed.
 REMOVAL_REASONS = ("through-hole", "not-populated", "mechanical", "other")
@@ -212,10 +218,8 @@ class ComponentEdit:
         return any(getattr(self, f) is not None for f in ("x", "y", "rotation", "layer"))
 
 
-#: Component fields an edit can set, in display order.
-EDIT_FIELDS = ("part_name", "part_number", "package", "layer", "x", "y", "rotation", "width", "length", "height")
-#: The size fields among them (mm, 0 = unknown).
-SIZE_FIELDS = ("width", "length", "height")
+#: Component fields an edit can set, in display order; SIZE_FIELDS are the sizes among them.
+EDIT_FIELDS = ("part_name", "part_number", "package", "layer", "x", "y", "rotation", *SIZE_FIELDS)
 
 
 @dataclass(frozen=True)
@@ -280,6 +284,8 @@ class Decisions:
     edit_frame: EditFrame | None = None  # None: the frame of the analysis itself
     # A panel without STEP-REPEAT placed as it is: the whole panel step is one circuit.
     as_is: bool = False
+    # What the component database says about the components (whole right after a read).
+    component_database: ComponentDatabase | None = None
     confirmed: bool = False
 
 
@@ -310,6 +316,8 @@ class PanelProject:
     layer_roles: dict[str, str] = field(default_factory=dict)
     panel_level_designators: list[str] = field(default_factory=list)
     single_board: SingleBoardSetup | None = None
+    # The component database's records for the components, and the names it lacks.
+    component_database: ComponentDatabase | None = None
     settings: Settings = field(default_factory=Settings)
 
     def placements_in(self, circuit: Circuit) -> list[Placement]:
