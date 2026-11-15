@@ -106,8 +106,10 @@ def assert_flatten_matches_circuits(project, settings: IssSettings) -> None:
         assert abs(f.x - e.x) <= EXPANDED_TOL and abs(f.y - e.y) <= EXPANDED_TOL, (name, (f.x, f.y), (e.x, e.y))
         assert angle_diff(f.angle, e.angle) <= 1e-3, name
         assert f.component == e.component
-    marks = sorted((x, y) for _n, x, y in panel_geometry(flat).fiducials)
-    assert marks == pytest.approx(sorted((x, y) for _n, x, y in panel_geometry(circuits).fiducials), abs=EXPANDED_TOL)
+    # pytest.approx takes no nested sequences, so compare the sorted marks coordinate by coordinate.
+    marks = [c for xy in sorted((x, y) for _n, x, y in panel_geometry(flat).fiducials) for c in xy]
+    expected = [c for xy in sorted((x, y) for _n, x, y in panel_geometry(circuits).fiducials) for c in xy]
+    assert marks == pytest.approx(expected, abs=EXPANDED_TOL)
 
 
 GRID = [(0, 0, 0), (45.0, 0, 0), (0, 55.0, 0), (45.0, 55.0, 0)]
