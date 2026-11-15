@@ -7,15 +7,16 @@ imports Qt.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from panelimport.analysis.pipeline import analyze, decisions_from_project, with_changes
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.analysis.snapshot import snapshot_from_project
 from panelimport.io.bom import Bom, read_bom
+from panelimport.io.compodb import DatabaseError, read_database
 from panelimport.io.odb import OdbJob
-from panelimport.model.issues import Issue, Severity, sort_issues, warning
+from panelimport.model.issues import Issue, Severity, info, sort_issues, warning
 from panelimport.model.panel import Decisions, PanelProject
 from panelimport.model.project_file import check_source, diff_projects, load_project, save_project
 from panelimport.settings import Settings
@@ -23,6 +24,13 @@ from panelimport.settings import Settings
 
 class SessionError(Exception):
     pass
+
+
+DATABASE_UNAVAILABLE = "database_unavailable"
+
+
+def database_unavailable(exc: Exception) -> Issue:
+    return info(DATABASE_UNAVAILABLE, f"{exc}; the components are shown without it", subject="database")
 
 
 @dataclass
@@ -51,15 +59,26 @@ class Session:
         return self.job is None and self.analysis is not None
 
     # ------------------------------------------------------------------ source
-    def open_source(self, path: str | os.PathLike, decisions: Decisions | None = None) -> PanelAnalysis:
-        return self.open_job(OdbJob(path), decisions)
+    def open_source(
+        self, path: str | os.PathLike, decisions: Decisions | None = None, database: str | os.PathLike | None = None
+    ) -> PanelAnalysis:
+        return self.open_job(OdbJob(path), decisions, database)
 
-    def open_job(self, job: OdbJob, decisions: Decisions | None = None) -> PanelAnalysis:
+    def open_job(
+        self, job: OdbJob, decisions: Decisions | None = None, database: str | os.PathLike | None = None
+    ) -> PanelAnalysis:
+        """Analyse ``job``; ``database`` is the component database to read for it (a
+        database that cannot be read is reported, not fatal)."""
         self.job = job
         self.decisions = decisions or Decisions()
         self.project_path = None
         self.saved_project = None
         self.extra_issues = []
+        if database:
+            try:
+                self.decisions = replace(self.decisions, component_database=read_database(database))
+            except DatabaseError as exc:
+                self.extra_issues.append(database_unavailable(exc))
         self.bom = read_bom(self.decisions.bom_path) if self.decisions.bom_path else None
         self.panel_job = self._panel_job_for(self.decisions)
         return self.reanalyze()
@@ -92,6 +111,10 @@ class Session:
 
     def update(self, **changes) -> PanelAnalysis:
         return self.set_decisions(with_changes(self.decisions, **changes))
+
+    def database_read(self) -> None:
+        """The component database was read after all: drop the report that it could not be."""
+        self.extra_issues = [i for i in self.extra_issues if i.code != DATABASE_UNAVAILABLE]
 
     def set_settings(self, settings: Settings) -> PanelAnalysis | None:
         self.settings = settings

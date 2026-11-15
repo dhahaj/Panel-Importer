@@ -17,6 +17,7 @@ from shapely.prepared import prep
 from panelimport.iss.mapping import IssLayout, build_layout, circuit_transforms, panel_outline, placement_sides
 from panelimport.iss.settings import IssSettings
 from panelimport.model.issues import Issue, error, sort_issues, warning
+from panelimport.model.database import MISSING, NOT_LOOKED_UP
 from panelimport.model.panel import SIZE_FIELDS, SIZES_VERSION, PanelProject
 
 #: Characters JaNets is known to accept in a component name.
@@ -225,6 +226,7 @@ def check_project(project: PanelProject, settings: IssSettings, layout: IssLayou
     # ------------------------------------------------------------ component sizes
     if settings.component_size == "body":
         issues += _size_checks(project, layout)
+    issues += _database_checks(project, layout)
 
     # ------------------------------------------------------------ panel-level parts
     if layout.skipped_panel_parts:
@@ -287,6 +289,43 @@ def _size_checks(project: PanelProject, layout: IssLayout) -> list[Issue]:
             )
         )
     return issues
+
+
+def _database_checks(project: PanelProject, layout: IssLayout) -> list[Issue]:
+    """Components the component database lacks, or was never asked about, when the
+    project was looked up in it."""
+    db = project.component_database
+    if db is None:
+        return []
+    names = [c.name for c in layout.program.components]
+    missing = [n for n in names if db.state(n) == MISSING]
+    unchecked = [n for n in names if db.state(n) == NOT_LOOKED_UP]
+    issues = []
+    if missing:
+        issues.append(
+            warning(
+                "component_not_in_database",
+                f"{len(missing)} component(s) are not in the component database ({db.label}): "
+                f"{_listed(missing)}. JaNets needs a record for each before the program runs",
+                subject="component_database",
+                data={"components": missing},
+            )
+        )
+    if unchecked:
+        issues.append(
+            warning(
+                "component_not_looked_up",
+                f"{len(unchecked)} component(s) were not looked up in the component database ({db.label}): "
+                f"{_listed(unchecked)}. Update from the database in Phase 1",
+                subject="component_database",
+                data={"components": unchecked},
+            )
+        )
+    return issues
+
+
+def _listed(names: list[str], limit: int = 8) -> str:
+    return ", ".join(names[:limit]) + (", …" if len(names) > limit else "")
 
 
 def _outline_checks(project: PanelProject) -> list[Issue]:

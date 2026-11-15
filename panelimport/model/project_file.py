@@ -50,6 +50,12 @@ def project_to_dict(project: PanelProject) -> dict:
     for item in [*data["circuits"], *data["placements"]]:
         if not item["design"]:
             del item["design"]
+    # A project without a component-database snapshot is written as before; a saved
+    # snapshot holds only what the project needs, never the whole database.
+    if data["component_database"] is None:
+        del data["component_database"]
+    else:
+        del data["component_database"]["whole"]
     return data
 
 

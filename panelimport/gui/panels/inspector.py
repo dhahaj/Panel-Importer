@@ -7,9 +7,11 @@ from collections.abc import Callable
 from PySide6.QtGui import QBrush
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
+from panelimport.analysis.database import part_database
 from panelimport.analysis.edits import shown_values, status_text
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.gui import theme
+from panelimport.model.panel import SIZE_FIELDS
 
 EXPORT_LABEL = "    export"  # the row under an edited value, showing the export's
 
@@ -38,6 +40,24 @@ def _size_rows(part, a: PanelAnalysis) -> list[tuple]:
         *_field(part, a, "Length (Y, mm)", "length", _size),
         *_field(part, a, "Height (mm)", "height", _size),
     ]
+
+
+def _database_rows(part, a: PanelAnalysis) -> list[tuple]:
+    """What the component database says about the part, and the size the program gets."""
+    db = part_database(a, part)
+    if not db.state:
+        return []
+    rows: list[tuple] = [("Component database", db.state)]
+    if db.record is not None:
+        r = db.record
+        rows += [
+            ("    description", r.description or "-"),
+            ("    Juki package", r.pkg_type or "-"),
+            ("    size (mm)", " × ".join(_size(getattr(r, f)) for f in SIZE_FIELDS)),
+        ]
+    if db.from_database:
+        rows.append(("Size in the program (mm)", " × ".join(_size(db.sizes[f]) for f in SIZE_FIELDS)))
+    return rows
 
 
 def _status_rows(part) -> list[tuple]:
@@ -104,6 +124,7 @@ class Inspector(QWidget):
             *_field(p, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
             ("Rotation raw (ODB++, CW)", f"{p.rotation_raw:.3f}°"),
             *_size_rows(p, a),
+            *_database_rows(p, a),
             ("Paste check", p.paste.describe() if p.paste else "-"),
         ]
         if p.written and p.written != p.designator:
@@ -136,6 +157,7 @@ class Inspector(QWidget):
             *_field(pp, a, "Rotation (CCW)", "rotation", "{:.3f}°"),
             ("Rotation raw (CW)", f"{pp.rotation_raw:.3f}°"),
             *_size_rows(pp, a),
+            *_database_rows(pp, a),
             ("Step", pp.step or "-"),
         ]
         for k, v in sorted(pp.attributes.items()):

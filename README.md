@@ -4,10 +4,12 @@ Desktop tool that imports an Altium **panel** exported as **ODB++**, identifies 
 writes the **Juki ISS** placement program for it.
 
 * **Phase 1** identifies the panel: circuit count, step-and-repeat, circuit 1, every
-  placement in circuit-relative coordinates, and the fiducials. The confirmed panel is
-  saved as `<name>.panel.json`. Phase 1 never changes the export.
+  placement in circuit-relative coordinates, and the fiducials. Components are looked
+  up in the JaNets component database for their size and description (see
+  [Component database](#component-database)). The confirmed panel is saved as
+  `<name>.panel.json`. Phase 1 never changes the export.
 * **Phase 2** reads a confirmed `<name>.panel.json` and writes `<name>.iss`, which
-  JaNets opens and fills with component data from its own database; it also compares
+  JaNets opens and fills with the rest of the component data from its own database; it also compares
   any two programs (ISS or JaNets `.x21`) part by part. See [Phase 2: ISS output](#phase-2-iss-output).
 
 ```
@@ -24,6 +26,7 @@ pip install -e ".[dev]"          # PySide6, shapely, numpy, unlzw3, pytest, PyIn
 panelimport-gui                  # the GUI (or: python -m panelimport)
 panelimport analyze Panel.tgz    # the same summary and issues the GUI shows
 panelimport analyze Panel.tgz --components-csv parts.csv   # also write the components
+panelimport analyze Panel.tgz --database D:\Data\DETEX.mdb   # another component database
 panelimport verify Panel.panel.json   # saved project vs. its source (SHA-256 + re-analysis)
 
 panelimport iss Panel.panel.json -o Program.iss            # write the ISS program
@@ -36,7 +39,8 @@ panelimport iss-compare Generated.iss D:\ER_RevF8\Program.x21   # part-by-part d
 design), `--as-is` (a panel without `STEP-REPEAT` placed as it is, see
 [How the panel is identified](#how-the-panel-is-identified)), `--first` (corner of
 circuit 1), `--order`, `--reference`, `--copy-suffix REGEX`, `--part-number-attribute`,
-`--panel-level FID1,FID2`, `--bom bom.csv`, `--components-csv FILE`, `--settings file.json`,
+`--panel-level FID1,FID2`, `--bom bom.csv`, `--components-csv FILE`, `--database MDB`
+(default: the one in the settings; `--database ""` reads none), `--settings file.json`,
 `--json`, `-v`.
 Exit code 0 = no errors, 1 = errors found, 2 = could not open.
 
@@ -105,8 +109,10 @@ git tag -a v0.3.0 --cleanup=verbatim -F notes.md && git push origin v0.3.0
   double-click; several rows at once change part name, part number, package or size),
   **Remove…** (`Delete`), **Restore**, **Revert** and **Find ▾**, which lists
   through-hole, not-populated, fiducial/mechanical and not-in-BOM parts for review.
-  Edited values are amber (the export's value is in the tooltip), added parts green,
-  removed parts grey and struck through; **Show** filters on them.
+  Edited values are amber (the export's value is in the tooltip), sizes from the
+  component database blue, added parts green, removed parts grey and struck through;
+  **Show** filters on them. **Update from database** reads the component database again
+  (see [Component database](#component-database)).
 * **Issues** — every inconsistency, with severity and location; click to zoom. Errors
   block **Confirm panel**; warnings must be acknowledged (saved with the project);
   copy-count errors in flattened panels can be confirmed as panel-level parts, and
@@ -196,7 +202,8 @@ saving.
 **File → Export components CSV…** and `panelimport analyze --components-csv FILE` write
 one row per component, with the columns of the Components tab: `Designator`, `Level`,
 `Part name`, `Part number`, `Package`, `Side`, `X (mm)`, `Y (mm)`, `Rotation (°)`,
-`Width (mm)`, `Length (mm)`, `Height (mm)`, `Paste check`, `Status`.
+`Width (mm)`, `Length (mm)`, `Height (mm)`, `Description`, `Juki package`, `Database`,
+`Paste check`, `Status`.
 
 * Every component is written whatever the tab's search and filters show: circuit 1's
   placements (`board`) first, then the panel-level parts (`panel`), each in designator
@@ -205,9 +212,52 @@ one row per component, with the columns of the Components tab: `Designator`, `Le
   circuit-relative, panel-level X/Y are panel coordinates, rotation is counter-clockwise.
   Numbers have the project file's precision instead of the three decimals shown; an
   unknown size is empty.
+* Sizes are the ones the ISS program is written with: edited, else the component
+  database's, else the export's. `Description` and `Juki package` are the database's;
+  `Database` says `found`, `not found` or `not looked up` (empty without a database).
 * Removed components are listed too, with `removed: …` in `Status` (`added` and
   `edited: …` mark the other changed ones); filter on it for the parts that are placed.
 * The file is comma-separated UTF-8 with a byte-order mark, which Excel opens directly.
+
+## Component database
+
+Phase 1 looks every component up in the JaNets component database (an Access `.mdb`,
+table `Compo`) for `CompoName`, `Description`, `PkgType`, `Width`, `Length` and
+`Height`.
+
+* **Where it is**: Edit → Settings → **Component database (JaNets)**, e.g.
+  `C:\ComponentDatabase\Data\DETEX.mdb`; **Test** reads it and says how many components it
+  has. Empty: no database is used. It is stored in the settings file under `database`
+  (`{"database": {"path": "…"}}`) and not copied into projects.
+* **When it is read**: on import, and on **Edit → Update from component database** (also
+  on the Components tab). Reopening a project and writing the ISS never read it: the
+  project keeps a snapshot of the records its components need (`component_database`, see
+  [Project file](#project-file)), so Phase 2 still works from the project alone. Updating
+  keeps the panel's confirmation and is one undo step.
+* **How it is read**: the file is copied to a temporary folder and the copy is opened
+  read-only, so the database never gets a slot in its `.ldb` lock file (see
+  [Diagnosing JaNets problems](#diagnosing-janets-problems)). Windows only: it needs
+  `pyodbc` (installed with the program on Windows) and the Microsoft Access ODBC driver
+  for the program's bitness (the 64-bit Microsoft Access Database Engine for 64-bit
+  Python). Reading takes about 3 s the first time and 0.2 s after that. When it cannot
+  be read, the import goes on without it and says why (`database_unavailable`).
+* **Matching**: a component's name is its part number, else its part name (the name the
+  ISS writes), compared without surrounding spaces and ignoring case. Edit the part
+  number to match, or pick it with **From database…** in the edit dialog, which searches
+  part numbers and descriptions. Picking from a database that was not read on import
+  also looks every component up in it, in the same undo step.
+* **Sizes**: `Width`, `Length` and `Height` are in 0.0001 mm. CircuitCAM wrote exactly
+  the database's sizes ÷ 10000, unswapped, in `ER_RevF8_circuitcam.iss` and
+  `102628_portrait_circuitcam.iss` (`tests/test_compodb.py`). Per dimension, the program
+  gets the edited size, else the database's (when it is not 0), else the export's, else
+  0.
+* **Description** becomes the ISS `comment`, as JaNets writes it. **PkgType** (the Juki
+  package) is shown only: it belongs in `model/componentData`, which is not written.
+* The Components tab and the CSV show the sizes the program gets (database sizes in
+  blue, the export's in the tooltip), the description, the Juki package and whether the
+  database has the part; the inspector shows the whole record. Issues (Info):
+  `not_in_database`, one per component name the database does not have, and
+  `database_not_looked_up` for names added since it was read (Update from database).
 
 ## How the panel is identified
 
@@ -305,21 +355,24 @@ export (`single_board`, Error until confirmed), units read by default
 disappeared (`fiducial_missing`) and a changed source on reopen (`source_changed`); for
 information, the designs of a mixed panel (`mixed_designs`), the skipped BOM comparison
 (`bom_designs`) and an as-is panel (`as_is`, `as_is_ignored` for a panel with
-`STEP-REPEAT`). Several board steps are designs, not an ambiguity.
+`STEP-REPEAT`). Several board steps are designs, not an ambiguity. The component database
+adds `not_in_database`, `database_not_looked_up` and `database_unavailable` (Info, see
+[Component database](#component-database)).
 
 Tolerances, fiducial patterns (`FID*`), the copy-suffix regex, the part-number attribute,
 circuit 1's corner, the numbering order, the reference point, the panel origin and the
 STEP-REPEAT anchor are **settings** (Edit → Settings), stored as JSON in
 `%APPDATA%\PanelImporter\settings.json` (Windows) or `~/.config/panelimport/settings.json`.
-The project file keeps a copy of the settings it was made with.
+The project file keeps a copy of the settings it was made with. The same file holds the
+ISS settings (`iss`) and where the component database is (`database`).
 
 ## Phase 2: ISS output
 
 `panelimport/iss/` reads a confirmed project and writes a Juki ISS program from it alone:
-the export, DETEX_New.mdb and every other database are never opened. Component records
-carry the name JaNets looks up (the Detex part number); size, package, pick and vision
-data, mark teaching, nozzles, feeders and rotation corrections come from JaNets or the
-machine.
+the export and the component database are never opened (sizes and descriptions come
+from the snapshot of the database the project keeps). Component records carry the name
+JaNets looks up (the Detex part number); package, pick and vision data, mark teaching,
+nozzles, feeders and rotation corrections come from JaNets or the machine.
 
 ### The frame
 
@@ -395,13 +448,16 @@ dedicated writer produces it, and every file is checked before it replaces anyth
   for full uniform grids; JaNets numbers MATRIX circuits from the grid's lower-left, so
   P moves to that circuit (positions on the panel do not change).
 * One component record per distinct component name, in first-use order: the part number,
-  or the part name with a warning. `comment` = the first of `comment_attributes` present
-  (`DSC`, `Description`, `Comment`), else the part name.
+  or the part name with a warning. `comment` = the component database's description,
+  else the first of `comment_attributes` present (`DSC`, `Description`, `Comment`), else
+  the part name.
 * `componentSize` (`witdh`, `length`, `height`) is the component's size from the project
   (`component_size = body`): one per component, so its placements are combined per
-  dimension — a size edited in Phase 1 wins for the whole component, otherwise the
-  export's, 0 where none is known. An angle offset of ±90° swaps width and length, so
-  they stay in the frame the machine turns the part in.
+  dimension — a size edited in Phase 1 wins for the whole component, then the component
+  database's, then the export's, 0 where none is known. An angle offset of ±90° swaps an
+  edited or exported width and length, so they stay in the frame the machine turns the
+  part in; the database's are written as they are, like CircuitCAM writes them, and are
+  never a `component_size_differs`.
   `model/componentData` is left out (`model_component_stubs` adds stubs, test only).
 * Fiducial mark names are the project's names when they are plain identifiers
   (`FID1`), else `F1`, `F2`, `F3` (copper fiducials are named like `F(6.351,12.703)`).
@@ -435,7 +491,7 @@ Errors stop the write; warnings go in the report and the dialog.
 
 | Code | Check | Severity |
 | --- | --- | --- |
-| `project_invalid` | not a readable v1–v4 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
+| `project_invalid` | not a readable v1–v5 project (exit 2 on the command line), or not confirmed, or missing circuits/outlines | Error |
 | `no_fiducials`, `too_many_fiducials` | fewer than 2 / more than 3 fiducials on the placements' layer | Error |
 | `mirrored_circuit` | any circuit, or circuit 1 itself, mirrored | Error |
 | `rotated_circuit` | one allocation per circuit forced with a rotated circuit (an allocation angle ≠ 0, which no reference program has) | Error |
@@ -453,6 +509,8 @@ Errors stop the write; warnings go in the report and the dialog.
 | `component_size_unknown` | components written with a size of 0 in some dimension, listed | Warning |
 | `component_size_differs` | placements of one component with different known sizes (and no edit choosing one) | Warning |
 | `component_size_old_project` | a project file older than version 3 has no sizes: all are written as 0 | Warning |
+| `component_not_in_database` | components the component database does not have, listed (JaNets needs a record for each) | Warning |
+| `component_not_looked_up` | components not looked up in the project's database snapshot, listed | Warning |
 | `matrix_layout` | `circuit_layout = matrix` on a panel that is not a full uniform unrotated grid, or flattened | Error |
 
 A saved project is confirmed by construction (Phase 1 saves only confirmed panels); the
@@ -501,7 +559,7 @@ saves, so a change is never guessed at.
 `numbering`, `circuit_reference`, `circuit_outline`, `designs` (mixed panels only),
 `circuits`, `part_number_attribute`, `placements` (with every attribute), `panel_parts`,
 `component_edits`, `fiducials`, `acknowledged_warnings`, `layer_roles`,
-`panel_level_designators`, `single_board`, `settings`. Loading is strict: unknown keys or
+`panel_level_designators`, `single_board`, `component_database`, `settings`. Loading is strict: unknown keys or
 a newer version are rejected. Values are rounded to 1 nm, so save → reopen gives an
 identical model.
 
@@ -518,6 +576,11 @@ frames, leaving out fields at their default:
 ]
 ```
 
+Version 5 added `component_database`, the snapshot of the component database: its
+`path`, when it was read (`read_at`), the records of the components the project names
+(`parts`: `name`, `description`, `pkg_type`, `width`, `length`, `height` in mm) and the
+names it does not have (`missing`). A project without one is still written as version 3
+or 4.
 Version 4 added the designs of a mixed panel: `designs` (name, the design's reference
 point `board_x`/`board_y` and outline) and `design` on each circuit and placement.
 A project with one design is still written as version 3, so older builds open it.
@@ -549,6 +612,10 @@ QT_QPA_PLATFORM=offscreen pytest -q
   check; the reference equations on every program in `tests/fixtures/iss/`; the `.x21`
   reader against issgen's program; and the ER golden comparison (`Panel.zip` +
   `Panel.panel.json`). Tests whose reference files are missing are skipped.
+* Component database: `tests/test_compodb.py` reads `tests/fixtures/DETEX.mdb` (skipped
+  when it or the Access driver is missing), checks that the file is left unchanged with
+  no `.ldb`, and that CircuitCAM's sizes are the database's.
+  `test_component_database.py` and `test_gui_database.py` use a database in memory.
 * Non-grid panels: `tests/fixtures/golden/` holds the exact bytes of 59 programs written
   for grid panels before that work (`test_golden_bytes.py`; they must not change).
   `test_instance_math.py` checks copy transforms (rotation about the datum, mirror,
@@ -567,14 +634,15 @@ panelimport/
   io/odb/      archive (folder/tgz/zip, .Z), matrix, stephdr, features, symbols,
                components, eda, attributes, job (lazy, cached)
   io/bom.py    optional BOM CSV
-  model/       issues, panel dataclasses, project_file, serialize
+  io/compodb.py  JaNets component database (read from a copy)
+  model/       issues, panel dataclasses, database (snapshot), project_file, serialize
   analysis/    roles, step_repeat, grouping (flattened), transforms (fit, grid,
                numbering), checks, fiducials, layers, edits (component edits,
-               suggestions), pipeline, result, snapshot
+               suggestions), database (lookup), pipeline, result, snapshot
   iss/         Phase 2: settings, mapping (project → ISS frame), checks, writer,
                reader (ISS and .x21), compare, report — never imports Qt
   gui/         main_window, canvas, geometry, import/settings/single-board/component
-               dialogs, iss_dialogs (Export ISS, Compare programs), controller (undo), panels/
+               dialogs (with the database picker), iss_dialogs (Export ISS, Compare programs), controller (undo), panels/
 packaging/     PyInstaller spec and entry points
 ```
 
@@ -592,7 +660,7 @@ packaging/     PyInstaller spec and entry points
 - [ ] Bottom-side placements: read and flagged by layer; whether the machine places them
       is for Phase 2.
 
-Not in Phase 1: ISS output (Phase 2), the DETEX_New.mdb lookup, rotation correction (beyond
+Not in Phase 1: ISS output (Phase 2), rotation correction (beyond
 editing a component's rotation by hand), editing the PCB data itself (component edits
 are stored in the project, not in the export), per-circuit edits (an edit applies to
 every circuit), and the Pick-and-Place CSV + Gerber input (to be built after the ODB++

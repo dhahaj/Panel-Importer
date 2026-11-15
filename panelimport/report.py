@@ -6,6 +6,7 @@ issue messages.
 
 from __future__ import annotations
 
+from panelimport.analysis.database import database_summary
 from panelimport.analysis.edits import edits_summary, status_text
 from panelimport.analysis.result import PanelAnalysis
 from panelimport.analysis.roles import ROLE_LABELS
@@ -54,6 +55,9 @@ def format_report(a: PanelAnalysis, *, verbose: bool = False) -> str:
     edits = edits_summary(a.component_edits)
     if edits:
         lines.append(f"Component edits: {edits}")
+    database = database_summary(a)
+    if database:
+        lines.append(f"Component database: {database}")
     if verbose and a.placements:
         lines.append("")
         lines.append("  designator   part             package        side      X         Y      rot   paste")

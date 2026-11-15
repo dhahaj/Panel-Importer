@@ -33,7 +33,7 @@ def summary_lines(prepared: Prepared) -> list[str]:
         f"Placements: {len(prog.placements)} in one circuit, from {len(layout.circuit_numbers)} circuits"
         if flat
         else f"Placements: {len(prog.placements)} per circuit, {len(prog.placements) * len(prog.circuits)} on the panel",
-        f"Components: {len(prog.components)}; {_sizes_text(prepared)}",
+        f"Components: {len(prog.components)}; {_sizes_text(prepared)}{_database_text(prepared)}",
         f"Fiducials:  {len(prog.fiducials)} on the {m.side} layer"
         + (f" ({', '.join(f.name for f in prog.fiducials)})" if prog.fiducials else "")
         + (f"; left out on the other layer: {', '.join(layout.other_layer_fiducials)}" if layout.other_layer_fiducials else ""),
@@ -51,6 +51,15 @@ def _sizes_text(prepared: Prepared) -> str:
     if complete == len(comps):
         return "every size known"
     return f"sizes: {complete} complete, {len(comps) - complete} with unknowns"  # one line in the GUI's summary
+
+
+def _database_text(prepared: Prepared) -> str:
+    db = prepared.project.component_database
+    if db is None:
+        return ""
+    comps = prepared.layout.program.components
+    found = sum(1 for c in comps if db.find(c.name) is not None)
+    return f"; {found} of {len(comps)} in the component database ({db.label})"
 
 
 def format_report(
