@@ -25,11 +25,12 @@ converts with (``Juki.Iss.Extension.Defines``) and how it reads and writes each 
 (``Juki.Msdb.DatabaseAccess``).  They agree with every option seen in the editor's
 screenshots.  Where JaNets stores a value it does not offer for the KE-3010/3020 (load
 control, tray restore, RX-7 vision), the value keeps its name but is not offered;
-a value JaNets has no name for is "Code n".  Nozzles are the ones some component
-already uses (JaNets lists the nozzles of the machine model).
+a value JaNets has no name for is "Code n".  The nozzles are the KE-3010/3020's of
+the Juki editor's nozzle table at Detex; :func:`nozzle_for` is JaNets's rule for the
+nozzle of a size (``NozzleData.GetDefault``), and the vacuum is converted as JaNets does.
 
 Settings whose unit or meaning could not be checked (offsets that are 0 everywhere, the
-vacuum, the gripper nozzle data, vision data) are shown read-only or left out.
+gripper nozzle data, vision data) are shown read-only or left out.
 """
 
 from __future__ import annotations
@@ -63,7 +64,8 @@ class Field:
     column: str
     label: str
     kind: str = NUMBER
-    scale: int = 1  # stored units per shown unit (numbers)
+    scale: float = 1  # stored units per shown unit (numbers) …
+    offset: float = 0  # … counted from this stored value
     decimals: int = 0
     unit: str = ""
     lo: float = 0.0
@@ -86,7 +88,7 @@ class Field:
     def shown(self, raw):
         """The stored value as the editor shows it."""
         if self.kind == NUMBER:
-            return 0.0 if raw is None else raw / self.scale
+            return 0.0 if raw is None else (raw - self.offset) / self.scale
         if self.kind == FLAG:
             return bool(raw)
         if self.kind == TEXT:
@@ -97,7 +99,7 @@ class Field:
         """A shown value as it is stored; ``like`` is the value it replaces (a Yes/No
         column holds a bool, a byte column 0 or 1; an empty text stays NULL)."""
         if self.kind == NUMBER:
-            return round(float(shown) * self.scale)
+            return round(float(shown) * self.scale + self.offset)
         if self.kind == FLAG:
             return bool(shown) if isinstance(like, bool) else int(bool(shown))
         if self.kind == TEXT:
@@ -168,6 +170,25 @@ _PITCHES = {tape: {code: _pitch_text(*feed) for code, feed in codes.items()} for
 _REJECT = {0: "Trash box", 2: "IC collection belt", 3: "Protect"}
 _REJECT_NOTE = "JaNets offers the IC collection belt for components with vision centering"
 _LOAD_NOTE = "Load control also needs a load, which is set in the Juki Component Database"
+#: The vacuum is stored as a count where 51 is 0 kPa (JaNets's ``VacuumConvertDbToIs``:
+#: ``(stored − 51) × −760/204 × 0.1333`` kPa); 217 is the -82.437 kPa of most components.
+_KPA_PER_STEP = -760 / 204 * 0.1333
+#: The KE-3010/3020's laser nozzles and the component sizes they are for, in mm (the
+#: nozzle table of the Juki editor at Detex).
+NOZZLES: dict[int, tuple[float, float | None]] = {
+    500: (0.45, 1.45), 501: (0.0, 0.45), 502: (0.45, 0.75), 503: (0.75, 1.45), 504: (1.1, 2.5), 505: (2.5, 4.0),
+    506: (4.0, 7.0), 507: (7.0, 10.0), 508: (10.0, None), 509: (0.0, 0.3), 510: (0.75, 2.5), 511: (2.0, 4.0),
+    512: (1.6, None), 521: (0.8, None),
+}  # fmt: skip
+
+
+def _nozzle_name(nozzle: int, low: float, high: float | None) -> str:
+    if high is None:
+        return f"{nozzle} ({low:g} mm and more)"
+    return f"{nozzle} (up to {high:g} mm)" if not low else f"{nozzle} ({low:g}–{high:g} mm)"
+
+
+_NOZZLE_NAMES = {nozzle: _nozzle_name(nozzle, *size) for nozzle, size in NOZZLES.items()}
 
 FIELDS: tuple[Field, ...] = (
     # ------------------------------------------------------------------ component
@@ -213,10 +234,10 @@ FIELDS: tuple[Field, ...] = (
           choices={100: "Algorithm 0", 1: "Algorithm 1", 2: "Algorithm 2", 3: "Algorithm 3"}),
     _degrees("Laser", "GX4PreRotate", "Pre-rotate"),
     Field("LaserGx10", "Gx10LA", "Use", FLAG),
-    Field("LaserGx10", "NozzleNo", "Nozzle No.", CHOICE, numbered=True,
-          note="The nozzles some component of the database already uses"),
-    Field("LaserGx10", "PumpVacuum", "Vacuum pump (stored value)", NUMBER, read_only=True,
-          note="The Juki editor shows this as a pressure (217 as -82.436); the conversion is not known"),
+    Field("LaserGx10", "NozzleNo", "Nozzle No.", CHOICE, numbered=True, choices=_NOZZLE_NAMES,
+          note="Picked from the size when the size changes, as the Juki editor does; it can then be changed"),
+    Field("LaserGx10", "PumpVacuum", "Vacuum pump", NUMBER, scale=1 / _KPA_PER_STEP, offset=51, decimals=3,
+          unit="kPa", lo=-101.308, hi=0.0),
     _speed("SpdXY", "XY", _XY),
     _speed("SpdPickDownZ", "Pick Z down", _Z),
     _speed("SpdPickUpZ", "Pick Z up", _Z),
@@ -382,7 +403,7 @@ class ComponentLibrary:
         if raw is None:
             return ""
         if f.kind == NUMBER:
-            return number_text(raw / f.scale, f.decimals)
+            return number_text(f.shown(raw), f.decimals)
         if f.kind == FLAG:
             return "Yes" if raw else "No"
         if f.kind == CHOICE:
@@ -455,6 +476,20 @@ class ComponentLibrary:
         changes.updates[new_id] = {**changes.updates.get(source_id, {}), NAME: name.strip()}
         return new_id
 
+    def apply_defaults(self, changes: Changes, compo_id: int) -> None:
+        """Give ``compo_id`` the :data:`DEFAULTS` and the nozzle JaNets picks for its size
+        (the settings this database has and that apply to its packaging)."""
+        values = self.component(changes, compo_id).values
+        stored = {
+            key: FIELD[key].stored(shown, values.get(key))
+            for key, shown in DEFAULTS.items()
+            if key in self.fields and _applies(FIELD[key], values)
+        }
+        picked = nozzle_for(values)
+        if picked is not None:
+            stored |= {k: v for k, v in zip(("LaserGx10.NozzleNo", "LaserGx10.PumpVacuum"), picked) if k in self.fields}
+        self.edit(changes, compo_id, stored)
+
     def delete(self, changes: Changes, compo_id: int) -> None:
         """Delete ``compo_id`` when the changes are saved; a new component just goes."""
         changes.updates.pop(compo_id, None)
@@ -510,9 +545,9 @@ class ComponentLibrary:
                     continue  # checked above
                 elif f.kind == TEXT and f.max_length and len(str(value or "")) > f.max_length:
                     found.append(f"{label}: {f.label} is longer than {f.max_length} characters")
-                elif f.kind == NUMBER and not f.lo * f.scale <= value <= f.hi * f.scale:
+                elif f.kind == NUMBER and not f.lo <= round(f.shown(value), f.decimals) <= f.hi:
                     found.append(
-                        f"{label}: {f.label} {number_text(value / f.scale, f.decimals)} is outside "
+                        f"{label}: {f.label} {number_text(f.shown(value), f.decimals)} is outside "
                         f"{number_text(f.lo, f.decimals)} to {number_text(f.hi, f.decimals)}"
                     )
                 elif f.kind == CHOICE and value not in {code for code, _ in self.options(f, c.values)}:
@@ -529,6 +564,75 @@ class ComponentLibrary:
 
 def _tables(names: Iterable[str]) -> str:
     return ", ".join(sorted(names))
+
+
+# ---------------------------------------------------------------------- the nozzle for a size
+#: What JaNets adds to the shorter side for some component types (``ComponentData.ContactSize``),
+#: in 0.0001 mm: a MELF touches the nozzle 0.5 mm wider, an SOP 1 mm narrower, …
+_CONTACT = {
+    3: 5000, 6: -7000, 11: 2500, 12: -23000, 101: -10000, 102: -30000, 103: -23000, 105: -20000, 106: -50000,
+    107: -30000, 109: -10000, 110: -10000, 251: -30000, 301: -130000, 302: -130000, 303: -130000,
+}  # fmt: skip
+#: The default nozzle for 0.45 to 1.45 mm is 500 (JaNets can also be set to 502/503 instead);
+#: Detex has it on 500: 84 components of that size are on 500, one on 503 and none on 502.
+NOZZLE_500 = True
+_MELF, _GAASFET, _OTHER, _INSERT = 3, 13, 999, (601, 602)
+
+
+def _short_side(width, length) -> int:
+    return min(width, length) if width is not None and length is not None else 0
+
+
+def nozzle_for(values: Mapping[str, object]) -> tuple[int, int] | None:
+    """The laser nozzle JaNets picks for a component of this size on the KE-3010/3020,
+    with its pump vacuum as stored: ``NozzleData.GetDefault`` for laser centering.
+    ``None`` when it picks none (a GaAsFET, "Other") or the size it needs is not all
+    there yet (JaNets would take a missing package size as 0 mm)."""
+    width, length = values.get("Compo.Width"), values.get("Compo.Length")
+    kind = values.get("Compo.PkgClassID")
+    if not width or not length or kind in (_GAASFET, _OTHER):
+        return None
+    package = _short_side(values.get("Compo.PackageWidth"), values.get("Compo.PackageLength"))
+    if not package and (kind in _INSERT or values.get("Compo.UsePackage") == 1):
+        return None
+    short = package if kind in _INSERT else min(width, length)
+    contact = package if kind in _INSERT or values.get("Compo.UsePackage") == 1 else min(width, length)
+    contact += _CONTACT.get(kind, 0)
+    vacuum, melf_vacuum = _vacuum(-82.437), _vacuum(-78.464)
+    if short < 2500:
+        return 509, vacuum
+    if kind == _MELF and 7500 <= short < 20000:
+        return 510, melf_vacuum
+    if kind == _MELF and 20000 <= short < 40000:
+        return 511, melf_vacuum
+    if 4500 <= contact < 14500:
+        return (500 if NOZZLE_500 else 502 if contact < 7500 else 503), vacuum
+    below = ((4500, 501), (25000, 504), (40000, 505), (70000, 506), (100000, 507))
+    return next((nozzle for top, nozzle in below if contact < top), 508), vacuum
+
+
+def _vacuum(kpa: float) -> int:
+    return FIELD["LaserGx10.PumpVacuum"].stored(kpa)
+
+
+def _fastest(key: str) -> int:
+    """A speed's fastest option: the first the Juki editor lists."""
+    return next(iter(FIELD[key].choices))
+
+
+_SPEED_KEYS = [f.key for f in FIELDS if f.table == "LaserGx10" and f.column.startswith("Spd")]
+#: Detex's settings for a new component, as shown (mm, degrees, kPa, option codes).
+DEFAULTS: dict[str, object] = {
+    "Expansion.ScrapType": 0, "Expansion.ScrapTypeGx6": 0,  # rejects to the trash box
+    "Feeder.TapeAngle": 0.0,
+    "LaserGx10.Gx10LA": True, "Laser.LaserHeight": -0.5, "Laser.Gx10LaserHeightLnc60": -0.5,
+    "Laser.LaserAlgo": 1, "Laser.GX4PreRotate": 30.0, "LaserGx10.PumpVacuum": -82.437,
+    **{key: _fastest(key) for key in _SPEED_KEYS},
+    "LaserGx10.CompoShape": 2,  # corner square
+    "Expansion.Retry": 1, "Expansion.OverPickGx10": 0.2,
+    "Expansion.PickPosAdjust": False, "Expansion.EtfPickPosAdjust": True,  # auto correct pick: electric
+    "Expansion.CompoLayer": 4, "Expansion.OverPlaceGx10": 0.5,
+}  # fmt: skip
 
 
 def _applies(f: Field, values: Mapping[str, object]) -> bool:

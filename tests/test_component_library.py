@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from panelimport.model.library import ADDED, DELETED, EDITED, FIELD, FIELDS, NAME, TABLES, Changes
+from panelimport.model.library import ADDED, DEFAULTS, DELETED, EDITED, FIELD, FIELDS, NAME, TABLES, Changes, nozzle_for
 from tests.synthetic.mdb import sample_library, values_of
 
 
@@ -78,7 +78,9 @@ def test_options_are_janets():
     assert _codes(lib, "Expansion.ScrapTypeGx6") == [0, 2, 3]
     assert _codes(lib, "Expansion.CompoLayer") == [1, 2, 3, 4, 5, 6, 7]
     assert lib.options(FIELD["Inspection.ChipStandCheck"]) == [(0, "No"), (1, "Yes"), (2, "If possible")]
-    assert lib.options(FIELD["LaserGx10.NozzleNo"]) == [(503, "503"), (504, "504"), (506, "506")]  # the ones in use
+    nozzles = dict(lib.options(FIELD["LaserGx10.NozzleNo"]))  # the KE-3010/3020's, with their component sizes
+    assert list(nozzles) == [*range(500, 513), 521]
+    assert (nozzles[500], nozzles[508], nozzles[509]) == ("500 (0.45–1.45 mm)", "508 (10 mm and more)", "509 (up to 0.3 mm)")
     assert lib.options(FIELD["Feeder.TapeTypeID"])[2] == (3, "12mm emboss")  # from the database's table
     # Names JaNets has for values that are kept here but not offered.
     assert lib.label(FIELD["Compo.PkgClassID"], 120) == "QFN"  # not in the database's PkgClass table
@@ -125,6 +127,87 @@ def test_a_pitch_must_be_one_of_its_tape_width():
     lib.record(d).values["Feeder.Pitch"] = 201  # stored: only the tape width changes
     lib.edit(ch, d, {"Feeder.TapeTypeID": 1})
     assert lib.problems(ch) == ["D-100: Feed pitch has no option 201"]
+
+
+def test_vacuum_is_in_kpa():
+    """JaNets: kPa = (stored − 51) × −760/204 × 0.1333 (the Juki editor cuts 217 to −82.436)."""
+    vacuum = FIELD["LaserGx10.PumpVacuum"]
+    assert not vacuum.read_only and vacuum.unit == "kPa"
+    assert lib_text(vacuum.key, 217) == "-82.437" and lib_text(vacuum.key, 209) == "-78.464"
+    assert vacuum.stored(-82.437) == 217 and vacuum.stored(-78.464) == 209 and vacuum.stored(-82.436) == 217
+
+
+def lib_text(key: str, raw) -> str:
+    return sample_library().text(key, {key: raw})
+
+
+def _size(width: float, length: float, kind: int = 1, package: tuple[float, float] | None = None) -> dict:
+    values = {"Compo.Width": round(width * 10000), "Compo.Length": round(length * 10000), "Compo.PkgClassID": kind}
+    if package is not None:
+        values |= {"Compo.UsePackage": 1, "Compo.PackageWidth": round(package[0] * 10000),
+                   "Compo.PackageLength": round(package[1] * 10000)}  # fmt: skip
+    return values
+
+
+@pytest.mark.parametrize(
+    ("values", "nozzle"),
+    [
+        (_size(0.2, 0.4), 509),  # laser centering, shorter side under 0.25 mm
+        (_size(0.3, 0.6), 501),
+        (_size(1.1, 2.0), 500),  # 0.45 to 1.45 mm: 500, as Detex has it (not 502/503)
+        (_size(2.0, 1.25), 500),
+        (_size(1.6, 3.2), 504),
+        (_size(3.0, 3.2), 505),
+        (_size(4.8, 3.6), 505),  # the shorter side
+        (_size(5.0, 5.0), 506),
+        (_size(8.0, 9.0), 507),
+        (_size(12.5, 20.0), 508),
+        (_size(0.95, 2.9, kind=11), 500),  # SOT: 0.25 mm more
+        (_size(1.3, 2.9, kind=11), 504),
+        (_size(3.9, 4.9, kind=101), 505),  # SOP: 1 mm less
+        (_size(8.0, 12.8, kind=101), 507),
+        (_size(6.0, 5.0, package=(2.0, 1.2)), 500),  # the package size when it is used
+    ],
+)
+def test_nozzle_from_the_size(values, nozzle):
+    """JaNets's NozzleData.GetDefault for laser centering on the KE-3010/3020."""
+    assert nozzle_for(values) == (nozzle, 217)  # -82.437 kPa
+
+
+def test_nozzle_special_cases():
+    assert nozzle_for(_size(1.0, 2.0, kind=3)) == (510, 209)  # MELF: its own nozzles, -78.464 kPa
+    assert nozzle_for(_size(2.59, 5.9, kind=3)) == (511, 209)
+    assert nozzle_for(_size(0.5, 1.0, kind=3)) == (500, 217)  # under 0.75 mm: 0.5 + 0.5 mm, as a chip
+    assert nozzle_for(_size(2.0, 2.0, kind=13)) is None  # GaAsFET: no laser nozzle
+    assert nozzle_for(_size(2.0, 2.0, kind=999)) is None
+    assert nozzle_for({"Compo.Width": None, "Compo.Length": 10000}) is None
+
+
+def test_new_component_with_the_defaults():
+    lib, ch = sample_library(), Changes()
+    u = _id(lib, "U-200")  # a stick SOP 6 × 4.9 mm with Algorithm 2, nozzle 506 and slower speeds
+    new = lib.add_copy(ch, u, "U-201")
+    lib.apply_defaults(ch, new)
+    v = lib.component(ch, new).values
+    shown = {key: lib.text(key, v) for key in DEFAULTS}
+    assert shown == {
+        "Expansion.ScrapType": "Trash box", "Expansion.ScrapTypeGx6": "Trash box", "LaserGx10.Gx10LA": "Yes",
+        "Laser.LaserHeight": "-0.5", "Laser.Gx10LaserHeightLnc60": "-0.5", "Laser.LaserAlgo": "Algorithm 1",
+        "Laser.GX4PreRotate": "30", "LaserGx10.PumpVacuum": "-82.437", "LaserGx10.CompoShape": "Corner square",
+        "LaserGx10.SpdXY": "Fast 2", "LaserGx10.SpdPickDownZ": "Fast 2", "LaserGx10.SpdPickUpZ": "Fast 2",
+        "LaserGx10.SpdPlaceDownZ": "Fast 2", "LaserGx10.SpdPlaceUpZ": "Fast 2",
+        "LaserGx10.SpdPlaceDownZGx10V": "Fast 2", "LaserGx10.SpdPlaceUpZGx10V": "Fast 2",
+        "LaserGx10.SpdThetaInLA": "Fast", "LaserGx10.SpdTheta": "Fast",
+        "Expansion.Retry": "1", "Expansion.OverPickGx10": "0.2", "Expansion.PickPosAdjust": "No",
+        "Expansion.EtfPickPosAdjust": "Yes", "Expansion.CompoLayer": "Layer 4", "Expansion.OverPlaceGx10": "0.5",
+        "Feeder.TapeAngle": "",  # a stick: the supply angle of tape does not apply
+    }  # fmt: skip
+    assert v["LaserGx10.NozzleNo"] == 505  # SOP 4.9 mm − 1 mm
+    assert type(v["Expansion.EtfPickPosAdjust"]) is bool and v["Expansion.Retry"] == 1  # as the columns hold them
+    assert lib.problems(ch) == []
+    d = lib.add_copy(ch, _id(lib, "R-400"), "R-401")  # tape, supplied at 270°
+    lib.apply_defaults(ch, d)
+    assert lib.component(ch, d).values["Feeder.TapeAngle"] == 0
 
 
 # ---------------------------------------------------------------------- unsaved changes
