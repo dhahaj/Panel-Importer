@@ -287,25 +287,33 @@ of its own; **File → Open database…** there opens any other `.mdb`.
 
 ### What can be changed
 
-Every unit and option name was checked against the Juki editor showing the same
-record (`101672-10` of `DETEX_New.mdb`, and the list); `panelimport/model/library.py`
+Every unit was checked against the Juki editor showing the same record (`101672-10` of
+`DETEX_New.mdb`, and the list). The options are JaNets's own: the lists of its
+Component Database editor (version 1.4), in its order and with its English names, and
+the value each one is stored as, taken from the tables JaNets itself converts with.
+They agree with every option seen in the Juki editor. `panelimport/model/library.py`
 has the evidence per setting.
 
 * Lengths are stored in 0.0001 mm and shown in mm with four decimals (the Juki editor
   shows two or three and cuts the rest: a laser height of −1.165 reads −1.16 there).
   Angles are stored in 1/80 degree.
-* A choice offers the options whose name is confirmed and the options some component of
-  the database already uses. A name that was worked out but not seen on screen says
-  **(unconfirmed)** (speed *Medium*, *Algorithm 2*, splice sensor *No*); an option with
-  no known name is **Code n** (component shapes other than *Corner square*, centering
-  preferences other than *Auto*). Nozzles are the ones already in use.
+* A choice offers what the Juki editor offers for the KE-3010/3020. The feed pitches are
+  those of the component's tape width (a stored pitch means another feed on another
+  width: 12 is 12 mm on 12 mm tape but 6 mm twice on 24 mm tape); changing the width
+  keeps the pitch when the new width has it and takes the first one otherwise, as JaNets
+  does. A value JaNets stores but does not offer there keeps its name and is kept while
+  it is not changed: *Load* control (it needs a load this program does not show), *Tray
+  restore*, *RX-7 vision only*. A value JaNets has no name for is **Code n**. Nozzles are
+  the ones already in use (JaNets lists the nozzles of the machine model).
+* JaNets offers the *IC collection belt* for rejected components only with vision
+  centering; it is offered here for every component.
 * Read-only here, to be changed in the Juki Component Database: the component type and
   kind of shape, tape/stick packaging, the package code, laser/vision as the centering
   method, the vacuum (its conversion to a pressure is not known), and everything not
   shown: offsets that are 0 for every component (their unit could not be checked), the
   gripper nozzle data, vision data, dispensing, IFS and the other machine types.
-* Only the settings that were changed are written. Which feed pitches a tape width
-  allows is not checked.
+* Only the settings that were changed are written. A pitch that is not one of its tape
+  width's is not saved.
 * A component with vision elements or light patterns (rows in tables that are not one
   row per component) can be edited, but not copied or deleted here.
 

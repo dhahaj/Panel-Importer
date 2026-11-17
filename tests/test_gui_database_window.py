@@ -87,7 +87,7 @@ def test_lists_the_components_like_the_juki_list(win):
     assert _shown_names(win) == ["D-100", "Q-300", "R-400", "U-200"]
     row = [_cell(win, "D-100", key) for _title, key in COLUMNS]
     assert row == [
-        "D-100", "DIODE, SCHOTTKY, 60V 5A", "Chip", "Chip component", "Tape", "12mm emboss 8 mm (8 × 1)", "L(504)",
+        "D-100", "DIODE, SCHOTTKY, 60V 5A", "Chip", "Chip component", "Tape", "12mm emboss 8 mm", "L(504)",
         "Layer 4", "If possible", "4.814", "3.584", "0.0002", "", "",
     ]  # fmt: skip
     assert [_cell(win, "U-200", key) for key in ("Compo.PkgClassID", "Feeder.FdrTypeID", "feeder", "centering")] == [
@@ -163,8 +163,28 @@ def test_editor_shows_what_is_stored_and_returns_what_changed(app):
         "Feeder.TapeAngle": 7200, "LaserGx10.SpdXY": 0, "LaserGx10.PickZ2StepUse": 1, "Expansion.Test": True,
         "Inspection.ChipStandCheck": 1,
     }  # fmt: skip
-    with pytest.raises(ValueError, match="XY has no option 3"):  # only confirmed or used options
+    with pytest.raises(ValueError, match="XY has no option 3"):  # only JaNets's options for XY
         dlg.set_shown("LaserGx10.SpdXY", 3)
+    dispose(dlg)
+
+
+def test_feed_pitches_follow_the_tape_width(app):
+    lib = mdb.sample_library()
+    dlg = ComponentEditor(lib, lib.component(Changes(), 1))  # D-100: 12mm emboss, 8 mm
+    pitch = dlg.widgets["Feeder.Pitch"]
+
+    def items():
+        return [pitch.itemText(i) for i in range(pitch.count())]
+
+    assert pitch.currentText() == "8 mm" and "8 mm (4 × 2)" in items()
+    dlg.set_shown("Feeder.TapeTypeID", 1)  # 8mm paper
+    assert items() == ["0.5 mm", "1 mm", "2 mm", "4 mm", "8 mm"] and pitch.currentText() == "8 mm"  # still a pitch
+    dlg.set_shown("Feeder.TapeTypeID", 4)  # 16mm emboss
+    dlg.set_shown("Feeder.Pitch", 16)
+    assert pitch.currentText() == "16 mm (8 × 2)"
+    dlg.set_shown("Feeder.TapeTypeID", 1)  # not a pitch of 8mm paper: the first one, as JaNets does
+    assert dlg.shown("Feeder.Pitch") == 50 and pitch.currentText() == "0.5 mm"
+    assert dlg.values() == {"Feeder.TapeTypeID": 1, "Feeder.Pitch": 50}
     dispose(dlg)
 
 
@@ -175,8 +195,9 @@ def test_editor_of_a_stick_component(app):
         assert not dlg.widgets[key].isEnabled(), key  # tape settings do not apply
     assert dlg.widgets["Feeder.TapeTypeID"].currentText() == "" and dlg.shown("Feeder.TapeTypeID") is None  # NULL
     assert dlg.widgets["Feeder.StickChangerType"].currentText() == "MBF44 SOIC"
-    assert dlg.widgets["LaserGx10.CompoShape"].currentText() == "Code 4"  # used, name not known
-    assert dlg.widgets["Laser.LaserAlgo"].currentText() == "Algorithm 2 (unconfirmed)"
+    assert dlg.widgets["LaserGx10.CompoShape"].currentText() == "Corner cut"
+    assert dlg.widgets["Laser.LaserAlgo"].currentText() == "Algorithm 2"
+    assert dlg.widgets["Feeder.Pitch"].count() == 1 and dlg.shown("Feeder.Pitch") is None  # no tape width
     assert dlg.values() == {}
     dispose(dlg)
 

@@ -235,6 +235,7 @@ class ComponentEditor(QDialog):
         self._name_taken = name_taken or (lambda name: False)
         self.widgets: dict[str, QWidget] = {}
         self._initial: dict[str, object] = {}
+        self._built_for: dict[str, object] = {}  # choice → the value of the setting its options depend on
         self.setWindowTitle(f"Component {component.name}" + (" (new)" if component.state == ADDED else ""))
 
         head = QFormLayout()
@@ -263,9 +264,9 @@ class ComponentEditor(QDialog):
         body.addWidget(self.tabs, 1)
 
         hint = QLabel(
-            "Lengths are in mm, angles in degrees. An option is offered when its name is confirmed or a component "
-            "of the database already uses it; “Code n” and “(unconfirmed)” are options whose Juki name is not "
-            "known for sure. Greyed settings are read-only here: change them in the Juki Component Database."
+            "Lengths are in mm, angles in degrees. The options are the Juki Component Database's own, and the "
+            "feed pitches are those of the tape width; “Code n” is a value JaNets has no name for. Greyed settings "
+            "are read-only here: change them in the Juki Component Database."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet(HINT_STYLE)
@@ -323,27 +324,50 @@ class ComponentEditor(QDialog):
             w.toggled.connect(self._refresh)
         else:
             w = QComboBox()
-            options = self.library.options(f)
-            if raw is None:
-                w.addItem("", None)
-            elif raw not in {code for code, _label in options}:
-                options = sorted(options + [(raw, self.library.label(f, raw))])
-            for code, label in options:
-                w.addItem(label, code)
-            w.setCurrentIndex(0 if raw is None else w.findData(raw))
+            self._fill(w, f, raw, self.component.values)
+            if f.per:
+                self._built_for[f.key] = self.component.values.get(f.per)
             w.currentIndexChanged.connect(self._refresh)
         return w
 
+    def _fill(self, w: QComboBox, f: Field, raw, values) -> None:
+        """The options of ``f`` for a component with ``values``, ``raw`` selected (a
+        stored value that is not an option is kept as the last one)."""
+        options = self.library.options(f, values)
+        if raw is None:
+            options = [(None, ""), *options]
+        elif raw not in {code for code, _label in options}:
+            options = [*options, (raw, self.library.label(f, raw, values))]
+        w.blockSignals(True)
+        w.clear()
+        for code, label in options:
+            w.addItem(label, code)
+        w.setCurrentIndex(0 if raw is None else w.findData(raw))
+        w.blockSignals(False)
+
+    def _now(self, key: str):
+        """A setting as it is now: as shown, or as stored when the dialog does not show it."""
+        return self.shown(key) if key in self.widgets else self.component.values.get(key)
+
     def _refresh(self, *_args) -> None:
-        """Enable what can be changed: not the read-only settings, nor those that only
-        apply to another packaging or while their switch is off."""
+        """Rebuild the options that depend on a changed setting (a pitch that is not one
+        of the new tape width's becomes its first, as in JaNets), and enable what can be
+        changed: not the read-only settings, nor those that only apply to another
+        packaging or while their switch is off."""
+        for key, built_for in list(self._built_for.items()):
+            f, now = FIELD[key], self._now(FIELD[key].per)
+            if now != built_for:
+                values = {**self.component.values, f.per: now}
+                codes = [code for code, _label in self.library.options(f, values)]
+                current = self.shown(key)
+                self._fill(self.widgets[key], f, current if current in codes else next(iter(codes), None), values)
+                self._built_for[key] = now
         for key, widget in self.widgets.items():
             f = FIELD[key]
             enabled = key in self.library.fields and not f.read_only
             if enabled and f.when is not None:
                 switch, value = f.when
-                now = self.shown(switch) if switch in self.widgets else self.component.values.get(switch)
-                enabled = int(now or 0) == value
+                enabled = int(self._now(switch) or 0) == value
             if isinstance(widget, QLineEdit):
                 widget.setReadOnly(not enabled)
                 widget.setStyleSheet("" if enabled else HINT_STYLE)

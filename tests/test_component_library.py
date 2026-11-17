@@ -31,7 +31,7 @@ def test_units_are_the_juki_editors():
     assert (shown["Expansion.EtfPickPosAdjust"], shown["Expansion.PickPosAdjust"]) == ("Yes", "No")
     assert (shown["Compo.PkgClassID"], shown["Feeder.FdrTypeID"]) == ("Chip", "Tape")  # from the database's tables
     assert shown["Compo.PackageWidth"] == ""  # NULL
-    assert lib.feeder_text(v) == "12mm emboss 8 mm (8 × 1)" and lib.centering_text(v) == "L(504)"
+    assert lib.feeder_text(v) == "12mm emboss 8 mm" and lib.centering_text(v) == "L(504)"
     assert lib.feeder_text(values_of("U-200")) == "MBF44 SOIC"
     assert lib.text("Feeder.TapeAngle", values_of("R-400")) == "270"
 
@@ -55,16 +55,76 @@ def test_stored_values():
     assert FIELD["Compo.Description"].stored("  ", None) is None  # an empty text stays NULL
 
 
-def test_options_are_the_confirmed_and_the_used():
+def _codes(lib, key: str, values=None) -> list[int]:
+    return [code for code, _label in lib.options(FIELD[key], values)]
+
+
+def test_options_are_janets():
+    """The options of JaNets's Component Database editor, in its order, with the values it stores."""
     lib = sample_library()
-    assert lib.options(FIELD["LaserGx10.SpdPlaceUpZ"]) == [(0, "Fast"), (2, "Slow"), (4, "Fast 2")]
-    # A name worked out but not seen in the Juki editor says so; it is offered once a component uses it.
-    assert lib.options(FIELD["LaserGx10.SpdPlaceDownZ"])[1] == (1, "Medium (unconfirmed)")
-    assert lib.options(FIELD["Laser.LaserAlgo"]) == [(1, "Algorithm 1"), (2, "Algorithm 2 (unconfirmed)")]
-    assert lib.options(FIELD["LaserGx10.CompoShape"]) == [(2, "Corner square"), (4, "Code 4")]
-    assert lib.options(FIELD["LaserGx10.NozzleNo"]) == [(503, "503"), (504, "504"), (506, "506")]
-    assert lib.options(FIELD["Feeder.TapeTypeID"])[2] == (3, "12mm emboss")
-    assert (201, "8 mm (4 × 2)") in lib.options(FIELD["Feeder.Pitch"])
+    assert lib.options(FIELD["LaserGx10.SpdXY"]) == [(4, "Fast 2"), (0, "Fast"), (1, "Medium"), (2, "Slow")]
+    assert _codes(lib, "LaserGx10.SpdPickDownZ") == _codes(lib, "LaserGx10.SpdPlaceUpZ") == [4, 0, 1, 2, 3, 7]
+    assert _codes(lib, "LaserGx10.SpdPlaceUpZGx10V") == [4, 0, 1, 2, 3, 7, 8, 9, 10]  # Fast V1-V3: 3010-20V/VA
+    assert _codes(lib, "LaserGx10.SpdThetaInLA") == [0, 1, 2] and _codes(lib, "LaserGx10.SpdTheta") == [0, 1, 2, 3]
+    assert dict(lib.options(FIELD["LaserGx10.SpdPickUpZ"]))[3] == "Slow 2"
+    assert lib.options(FIELD["Laser.LaserAlgo"]) == [
+        (100, "Algorithm 0"), (1, "Algorithm 1"), (2, "Algorithm 2"), (3, "Algorithm 3"),
+    ]  # fmt: skip
+    shapes = dict(lib.options(FIELD["LaserGx10.CompoShape"]))
+    assert (shapes[2], shapes[4], shapes[99]) == ("Corner square", "Corner cut", "Cylinder") and len(shapes) == 8
+    assert lib.options(FIELD["Compo.GX4PriorityLV"]) == [(0, "Auto"), (1, "Laser priority"), (2, "Vision priority")]
+    assert lib.options(FIELD["Feeder.SpliceSensorUse"]) == [(0, "If possible"), (1, "No")]
+    assert lib.options(FIELD["Expansion.ScrapType"]) == [(0, "Trash box"), (2, "IC collection belt"), (3, "Protect")]
+    assert _codes(lib, "Expansion.ScrapTypeGx6") == [0, 2, 3]
+    assert _codes(lib, "Expansion.CompoLayer") == [1, 2, 3, 4, 5, 6, 7]
+    assert lib.options(FIELD["Inspection.ChipStandCheck"]) == [(0, "No"), (1, "Yes"), (2, "If possible")]
+    assert lib.options(FIELD["LaserGx10.NozzleNo"]) == [(503, "503"), (504, "504"), (506, "506")]  # the ones in use
+    assert lib.options(FIELD["Feeder.TapeTypeID"])[2] == (3, "12mm emboss")  # from the database's table
+    # Names JaNets has for values that are kept here but not offered.
+    assert lib.label(FIELD["Compo.PkgClassID"], 120) == "QFN"  # not in the database's PkgClass table
+    assert lib.label(FIELD["Compo.Rx7ComponentType"], 4) == "Odd shape (without leads)"
+    assert lib.label(FIELD["Compo.GX4PriorityLV"], 3) == "RX-7 vision only"
+    assert lib.label(FIELD["Expansion.ScrapType"], 1) == "Tray restore"
+    assert lib.label(FIELD["Feeder.StickChangerType"], 0) == "None"
+    assert lib.label(FIELD["LaserGx10.CompoShape"], 5) == "Code 5"  # a value JaNets has no name for
+
+
+def test_load_is_named_but_not_offered():
+    """Load control needs a load this program does not show: a component that has it keeps it."""
+    lib = sample_library()
+    lib.record(_id(lib, "U-200")).values["Expansion.FCTypePickGx10"] = 1
+    assert lib.options(FIELD["Expansion.FCTypePickGx10"]) == [(0, "Stroke")]
+    assert lib.label(FIELD["Expansion.FCTypePickGx10"], 1) == "Load"
+    assert lib.text("Expansion.FCTypePickGx10", values_of("U-200") | {"Expansion.FCTypePickGx10": 1}) == "Load"
+
+
+def test_feed_pitches_depend_on_the_tape_width():
+    """A stored pitch means another feed on another tape width (JaNets's MdbFeederInfo)."""
+    lib = sample_library()
+    pitch = FIELD["Feeder.Pitch"]
+
+    def on(tape):
+        return lib.options(pitch, {"Feeder.TapeTypeID": tape})
+
+    assert on(1) == [(50, "0.5 mm"), (1, "1 mm"), (2, "2 mm"), (4, "4 mm"), (8, "8 mm")]  # 8mm paper
+    assert dict(on(3))[201] == "8 mm (4 × 2)" and dict(on(3))[12] == "12 mm"
+    assert dict(on(5))[12] == "12 mm (6 × 2)" and dict(on(5))[204] == "12 mm" and dict(on(5))[24] == "24 mm (12 × 2)"
+    assert dict(on(4))[16] == "16 mm (8 × 2)" and on(6) == [] and on(None) == []
+    assert lib.text("Feeder.Pitch", {"Feeder.TapeTypeID": 5, "Feeder.Pitch": 16}) == "16 mm (8 × 2)"
+    assert lib.feeder_text({"Feeder.FdrTypeID": 1, "Feeder.TapeTypeID": 3, "Feeder.Pitch": 201}) == "12mm emboss 8 mm (4 × 2)"
+
+
+def test_a_pitch_must_be_one_of_its_tape_width():
+    lib, ch = sample_library(), Changes()
+    d = _id(lib, "D-100")  # 12mm emboss, 8 mm
+    lib.edit(ch, d, {"Feeder.TapeTypeID": 1})  # 8 mm is a pitch of 8mm paper too
+    assert lib.problems(ch) == []
+    lib.edit(ch, d, {"Feeder.Pitch": 201})  # 4 × 2 is not
+    assert lib.problems(ch) == ["D-100: Feed pitch has no option 201"]
+    ch.clear()
+    lib.record(d).values["Feeder.Pitch"] = 201  # stored: only the tape width changes
+    lib.edit(ch, d, {"Feeder.TapeTypeID": 1})
+    assert lib.problems(ch) == ["D-100: Feed pitch has no option 201"]
 
 
 # ---------------------------------------------------------------------- unsaved changes
