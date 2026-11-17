@@ -33,6 +33,7 @@ from panelimport.gui import theme
 from panelimport.gui.canvas import PanelCanvas
 from panelimport.gui.component_dialog import ComponentDialog, RemoveDialog
 from panelimport.gui.controller import Controller
+from panelimport.gui.database_window import ComponentDatabaseWindow
 from panelimport.gui.import_dialog import ImportDialog
 from panelimport.gui.iss_dialogs import CompareDialog, ExportIssDialog
 from panelimport.gui.panels.circuits import CircuitsPanel
@@ -67,6 +68,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.database = database or DatabaseSettings()
         self._library: ComponentDatabase | None = None  # the component database as last read
+        self.database_window: ComponentDatabaseWindow | None = None
         self.controller = Controller(settings, self)
         self.setWindowTitle("Panel Importer")
         self.resize(1400, 900)
@@ -174,6 +176,12 @@ class MainWindow(QMainWindow):
             self.update_database,
             tip="Read the component database again and look every component up in it",
         )
+        self.act_database = self._action(
+            "&Component database…",
+            self.browse_database,
+            "Ctrl+D",
+            tip="Browse and edit the components of the JaNets component database",
+        )
         self.suggest_menu = QMenu("Remove &suggested components", self)
         self.suggest_actions: dict[str, QAction] = {}
         for kind, label in edits.SUGGESTIONS.items():
@@ -196,6 +204,9 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_update_database)
         m.addSeparator()
         m.addAction(self.act_settings)
+        m = self.menuBar().addMenu("&Database")
+        m.addAction(self.act_database)
+        m.addAction(self.act_update_database)
         m = self.menuBar().addMenu("&View")
         for a in (self.act_fit, self.act_bottom, self.act_measure, None, self.act_reset_layout):
             m.addSeparator() if a is None else m.addAction(a)
@@ -614,6 +625,30 @@ class MainWindow(QMainWindow):
         self.controller.update_database(db)
         self.statusBar().showMessage(f"Component database {database_summary(self.analysis)}", 8000)
 
+    def browse_database(self) -> None:
+        """Show the component database window (the configured database, when there is one).
+        It is a window of its own, so it can sit next to this one or behind it."""
+        w = self.database_window
+        if w is None:
+            w = self.database_window = ComponentDatabaseWindow(self.database.path, self.qsettings)
+            w.saved.connect(self._database_saved)
+        elif w.library is None and self.database.path:
+            w.open(self.database.path)
+        w.show()
+        w.raise_()
+        w.activateWindow()
+
+    def _database_saved(self, path: str) -> None:
+        """Components were changed in the database: what was read from it is out of date."""
+        if self.database.path and Path(path) == Path(self.database.path):
+            self._library = None
+            if self.analysis is not None and not self.controller.read_only:
+                self.statusBar().showMessage(
+                    "The component database was changed: Update from component database looks the panel's "
+                    "components up again",
+                    10000,
+                )
+
     def suggest_removals(self, kind: str) -> None:
         a = self.analysis
         if a is None:
@@ -884,6 +919,12 @@ class MainWindow(QMainWindow):
         if not self._discard_ok():
             event.ignore()
             return
+        if self.database_window is not None:
+            if not self.database_window.close():  # unsaved changes there, kept
+                event.ignore()
+                return
+            self.database_window.deleteLater()
+            self.database_window = None
         self.qsettings.setValue("window/geometry", self.saveGeometry())
         self.qsettings.setValue("window/state", self.saveState())
         super().closeEvent(event)

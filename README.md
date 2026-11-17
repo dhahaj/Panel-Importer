@@ -11,6 +11,9 @@ writes the **Juki ISS** placement program for it.
 * **Phase 2** reads a confirmed `<name>.panel.json` and writes `<name>.iss`, which
   JaNets opens and fills with the rest of the component data from its own database; it also compares
   any two programs (ISS or JaNets `.x21`) part by part. See [Phase 2: ISS output](#phase-2-iss-output).
+* **Database → Component database…** lists every component of the JaNets component
+  database and edits, copies and deletes them. See
+  [Component database editor](#component-database-editor).
 
 ```
 import ODB++ → automatic detection → review issues → confirm panel → pick fiducials
@@ -258,6 +261,79 @@ table `Compo`) for `CompoName`, `Description`, `PkgType`, `Width`, `Length` and
   database has the part; the inspector shows the whole record. Issues (Info):
   `not_in_database`, one per component name the database does not have, and
   `database_not_looked_up` for names added since it was read (Update from database).
+
+## Component database editor
+
+**Database → Component database…** (`Ctrl+D`) opens the configured database in a window
+of its own; **File → Open database…** there opens any other `.mdb`.
+
+* **The list** has the columns of the Juki Component Database's list: component name,
+  comment, component type, kind of shape, packaging style, feeder type, centering on the
+  3010-20 (`L(504)` = laser, nozzle 504), layer, tombstone detection, width, length,
+  height and package code. Click a header to sort; the filter box searches every column.
+* **Edit…** (double-click or `Enter`) shows one component with the Juki editor's pages:
+  component data on the left (type, dimensions, package size, centering method and
+  preference) and the tabs *Packaging style*, *Laser centering*, *Pick conditions*,
+  *Placement conditions* and *Check*. The machine sections are the KE-3010/3020's
+  (`Gx10` in the database) and the JM-10's picking stroke.
+* **New from copy…** (`Ctrl+N`) makes a component with all the settings of the selected
+  one under a new name, and opens it in the editor: the way to add a part the database
+  does not have (`not_in_database`) is to copy a similar one and change its name,
+  comment and size. **Delete** (`Delete`) removes components. **Revert changes** drops
+  the unsaved changes to the selected rows.
+* Changes are kept in the window (edited values amber with the database's in the
+  tooltip, new components green, deleted ones struck through) until **Save to database**
+  (`Ctrl+S`) writes them all at once, after asking.
+
+### What can be changed
+
+Every unit and option name was checked against the Juki editor showing the same
+record (`101672-10` of `DETEX_New.mdb`, and the list); `panelimport/model/library.py`
+has the evidence per setting.
+
+* Lengths are stored in 0.0001 mm and shown in mm with four decimals (the Juki editor
+  shows two or three and cuts the rest: a laser height of −1.165 reads −1.16 there).
+  Angles are stored in 1/80 degree.
+* A choice offers the options whose name is confirmed and the options some component of
+  the database already uses. A name that was worked out but not seen on screen says
+  **(unconfirmed)** (speed *Medium*, *Algorithm 2*, splice sensor *No*); an option with
+  no known name is **Code n** (component shapes other than *Corner square*, centering
+  preferences other than *Auto*). Nozzles are the ones already in use.
+* Read-only here, to be changed in the Juki Component Database: the component type and
+  kind of shape, tape/stick packaging, the package code, laser/vision as the centering
+  method, the vacuum (its conversion to a pressure is not known), and everything not
+  shown: offsets that are 0 for every component (their unit could not be checked), the
+  gripper nozzle data, vision data, dispensing, IFS and the other machine types.
+* Only the settings that were changed are written. Which feed pitches a tape width
+  allows is not checked.
+* A component with vision elements or light patterns (rows in tables that are not one
+  row per component) can be edited, but not copied or deleted here.
+
+### How it is saved
+
+The rule of [reading](#component-database) holds for writing: this program never opens
+the live database, so it never takes a slot in its `.ldb` (see
+[Diagnosing JaNets problems](#diagnosing-janets-problems)).
+
+1. The database is copied to a temporary folder, and the changes are made in the copy.
+2. The copy is read back and compared with what was asked for.
+3. The live file is copied to `PanelImporter backups\<name> <date> <time>.mdb` next to it
+   (the newest 50 are kept).
+4. The live file is replaced by the changed copy in one step.
+
+Nothing is written, and the changes stay in the window, when:
+
+* **a program has the database open** (JaNets or the Juki Component Database, on any
+  PC): Windows does not let an open `.mdb` be replaced. The status bar names who the
+  lock file lists (`Open in WIN10 (justware)`); close it there and save again;
+* **a component was changed in the database after it was read here** (the setting being
+  changed, or any shown setting of a component being copied or deleted): reload and
+  make the change again. Changes others made to other components or settings are kept;
+* the file changes while the copy is being prepared, or the copy does not read back as
+  asked for.
+
+To undo a save, close the programs that use the database and copy the backup over it.
+After a save, **Update from component database** looks the panel's components up again.
 
 ## How the panel is identified
 
@@ -616,6 +692,13 @@ QT_QPA_PLATFORM=offscreen pytest -q
   when it or the Access driver is missing), checks that the file is left unchanged with
   no `.ldb`, and that CircuitCAM's sizes are the database's.
   `test_component_database.py` and `test_gui_database.py` use a database in memory.
+* Component database editor: `tests/synthetic/mdb.py` is a small JaNets-like database,
+  in memory and as a real Access file made through the driver. `test_component_library.py`
+  checks the units and option names against the Juki editor's screenshots and the
+  unsaved changes; `test_compolib.py` (skipped without the Access driver) saves edits,
+  copies and deletes to the file and checks that nothing is written while it is open,
+  after a conflicting change, or when the result is not what was asked for;
+  `test_gui_database_window.py` drives the window and the editor.
 * Non-grid panels: `tests/fixtures/golden/` holds the exact bytes of 59 programs written
   for grid panels before that work (`test_golden_bytes.py`; they must not change).
   `test_instance_math.py` checks copy transforms (rotation about the datum, mirror,
@@ -635,14 +718,17 @@ panelimport/
                components, eda, attributes, job (lazy, cached)
   io/bom.py    optional BOM CSV
   io/compodb.py  JaNets component database (read from a copy)
-  model/       issues, panel dataclasses, database (snapshot), project_file, serialize
+  io/compolib.py every component with its settings; saving changes (backup, then replace)
+  model/       issues, panel dataclasses, database (snapshot), library (the database's
+               components, their settings and unsaved changes), project_file, serialize
   analysis/    roles, step_repeat, grouping (flattened), transforms (fit, grid,
                numbering), checks, fiducials, layers, edits (component edits,
                suggestions), database (lookup), pipeline, result, snapshot
   iss/         Phase 2: settings, mapping (project → ISS frame), checks, writer,
                reader (ISS and .x21), compare, report — never imports Qt
   gui/         main_window, canvas, geometry, import/settings/single-board/component
-               dialogs (with the database picker), iss_dialogs (Export ISS, Compare programs), controller (undo), panels/
+               dialogs (with the database picker), iss_dialogs (Export ISS, Compare programs), controller (undo), panels/,
+               database_window (component database list and editor)
 packaging/     PyInstaller spec and entry points
 ```
 
