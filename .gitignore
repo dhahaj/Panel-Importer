@@ -13,3 +13,4 @@ htmlcov/
 *.zip
 !tests/fixtures/**/*.tgz
 !tests/fixtures/**/*.zip
+tests/fixtures/**/*.mdb
