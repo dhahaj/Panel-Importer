@@ -57,7 +57,11 @@ from panelimport.model.library import (
     Component,
     ComponentLibrary,
     Field,
+    nozzle_for,
 )
+
+#: The settings the nozzle is picked from (see :func:`nozzle_for`).
+SIZE_KEYS = ("Compo.Width", "Compo.Length", "Compo.UsePackage", "Compo.PackageWidth", "Compo.PackageLength")
 
 HINT_STYLE = "color: #8b949e;"
 WARNING_STYLE = "color: #ffb000;"
@@ -235,6 +239,8 @@ class ComponentEditor(QDialog):
         self._name_taken = name_taken or (lambda name: False)
         self.widgets: dict[str, QWidget] = {}
         self._initial: dict[str, object] = {}
+        self._built_for: dict[str, object] = {}  # choice → the value of the setting its options depend on
+        self._size: dict[str, object] = {}  # the size the nozzle was last picked for
         self.setWindowTitle(f"Component {component.name}" + (" (new)" if component.state == ADDED else ""))
 
         head = QFormLayout()
@@ -263,9 +269,9 @@ class ComponentEditor(QDialog):
         body.addWidget(self.tabs, 1)
 
         hint = QLabel(
-            "Lengths are in mm, angles in degrees. An option is offered when its name is confirmed or a component "
-            "of the database already uses it; “Code n” and “(unconfirmed)” are options whose Juki name is not "
-            "known for sure. Greyed settings are read-only here: change them in the Juki Component Database."
+            "Lengths are in mm, angles in degrees. The options are the Juki Component Database's own, and the "
+            "feed pitches are those of the tape width; “Code n” is a value JaNets has no name for. Greyed settings "
+            "are read-only here: change them in the Juki Component Database."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet(HINT_STYLE)
@@ -278,6 +284,7 @@ class ComponentEditor(QDialog):
         layout.addWidget(hint)
         layout.addWidget(buttons)
         self.resize(1180, 760)
+        self._size = self._now_size()
         self._refresh()
 
     # ------------------------------------------------------------------ building
@@ -323,32 +330,79 @@ class ComponentEditor(QDialog):
             w.toggled.connect(self._refresh)
         else:
             w = QComboBox()
-            options = self.library.options(f)
-            if raw is None:
-                w.addItem("", None)
-            elif raw not in {code for code, _label in options}:
-                options = sorted(options + [(raw, self.library.label(f, raw))])
-            for code, label in options:
-                w.addItem(label, code)
-            w.setCurrentIndex(0 if raw is None else w.findData(raw))
+            self._fill(w, f, raw, self.component.values)
+            if f.per:
+                self._built_for[f.key] = self.component.values.get(f.per)
             w.currentIndexChanged.connect(self._refresh)
         return w
 
+    def _fill(self, w: QComboBox, f: Field, raw, values) -> None:
+        """The options of ``f`` for a component with ``values``, ``raw`` selected (a
+        stored value that is not an option is kept as the last one)."""
+        options = self.library.options(f, values)
+        if raw is None:
+            options = [(None, ""), *options]
+        elif raw not in {code for code, _label in options}:
+            options = [*options, (raw, self.library.label(f, raw, values))]
+        w.blockSignals(True)
+        w.clear()
+        for code, label in options:
+            w.addItem(label, code)
+        w.setCurrentIndex(0 if raw is None else w.findData(raw))
+        w.blockSignals(False)
+
+    def _now(self, key: str):
+        """A setting as it is now: as shown, or as stored when the dialog does not show it."""
+        return self.shown(key) if key in self.widgets else self.component.values.get(key)
+
     def _refresh(self, *_args) -> None:
-        """Enable what can be changed: not the read-only settings, nor those that only
-        apply to another packaging or while their switch is off."""
+        """Rebuild the options that depend on a changed setting (a pitch that is not one
+        of the new tape width's becomes its first, as in JaNets), and enable what can be
+        changed: not the read-only settings, nor those that only apply to another
+        packaging or while their switch is off."""
+        size = self._now_size()
+        if size != self._size:  # a new size picks the nozzle, as in the Juki editor
+            self._size = size
+            self._pick_nozzle(size)
+        for key, built_for in list(self._built_for.items()):
+            f, now = FIELD[key], self._now(FIELD[key].per)
+            if now != built_for:
+                values = {**self.component.values, f.per: now}
+                codes = [code for code, _label in self.library.options(f, values)]
+                current = self.shown(key)
+                self._fill(self.widgets[key], f, current if current in codes else next(iter(codes), None), values)
+                self._built_for[key] = now
         for key, widget in self.widgets.items():
             f = FIELD[key]
             enabled = key in self.library.fields and not f.read_only
             if enabled and f.when is not None:
                 switch, value = f.when
-                now = self.shown(switch) if switch in self.widgets else self.component.values.get(switch)
-                enabled = int(now or 0) == value
+                enabled = int(self._now(switch) or 0) == value
             if isinstance(widget, QLineEdit):
                 widget.setReadOnly(not enabled)
                 widget.setStyleSheet("" if enabled else HINT_STYLE)
             else:
                 widget.setEnabled(enabled)
+
+    def _now_size(self) -> dict[str, object]:
+        """The size as it is now, as stored."""
+        return {
+            key: FIELD[key].stored(self.shown(key), self.component.values.get(key)) if key in self.widgets
+            else self.component.values.get(key)
+            for key in SIZE_KEYS
+        }  # fmt: skip
+
+    def _pick_nozzle(self, size: dict[str, object]) -> None:
+        picked = nozzle_for({**self.component.values, **size})
+        if picked is None:
+            return
+        for key, value in zip(("LaserGx10.NozzleNo", "LaserGx10.PumpVacuum"), picked):
+            f = FIELD[key]
+            if key in self.widgets and key in self.library.fields and not f.read_only:
+                widget = self.widgets[key]
+                if isinstance(widget, QComboBox) and widget.findData(value) < 0:
+                    continue  # a nozzle this database cannot be set to
+                self.set_shown(key, f.shown(value))
 
     # ------------------------------------------------------------------ values
     def shown(self, key: str):
@@ -488,6 +542,11 @@ class ComponentDatabaseWindow(QMainWindow):
         self.act_copy = self._action(
             "&New from copy…", self.new_copy, QKeySequence.New, "A new component with the selected one's settings"
         )
+        self.act_new_defaults = self._action(
+            "New with de&faults…", lambda: self.new_copy(defaults=True), "Ctrl+Shift+N",
+            "A new component with the selected one's packaging and size and the default settings "
+            "(trash box, laser centering, Algorithm 1, fastest speeds, …), its nozzle picked from the size",
+        )  # fmt: skip
         self.act_delete = self._action("&Delete", self.delete_selected, QKeySequence.Delete)
         self.act_revert = self._action(
             "Re&vert changes", self.revert_selected, tip="Drop the unsaved changes to the selected components"
@@ -500,18 +559,19 @@ class ComponentDatabaseWindow(QMainWindow):
         for a in (self.act_open, self.act_reload, None, self.act_save, None, self.act_close):
             m.addSeparator() if a is None else m.addAction(a)
         m = self.menuBar().addMenu("&Component")
-        for a in (self.act_edit, self.act_copy, None, self.act_delete, self.act_revert):
+        for a in (self.act_edit, self.act_copy, self.act_new_defaults, None, self.act_delete, self.act_revert):
             m.addSeparator() if a is None else m.addAction(a)
         tb = QToolBar("Database")
         tb.setObjectName("databaseToolbar")
-        for a in (self.act_open, self.act_reload, self.act_save, None, self.act_edit, self.act_copy, self.act_delete,
+        for a in (self.act_open, self.act_reload, self.act_save, None, self.act_edit, self.act_copy, self.act_new_defaults,
+                  self.act_delete,
                   self.act_revert):  # fmt: skip
             tb.addSeparator() if a is None else tb.addAction(a)
         self.addToolBar(tb)
 
     def menu(self) -> QMenu:
         menu = QMenu(self)
-        for a in (self.act_edit, self.act_copy, None, self.act_delete, self.act_revert):
+        for a in (self.act_edit, self.act_copy, self.act_new_defaults, None, self.act_delete, self.act_revert):
             menu.addSeparator() if a is None else menu.addAction(a)
         return menu
 
@@ -550,6 +610,7 @@ class ComponentDatabaseWindow(QMainWindow):
         self.act_save.setEnabled(bool(self.changes))
         self.act_edit.setEnabled(len(chosen) == 1 and chosen[0].state != DELETED)
         self.act_copy.setEnabled(len(chosen) == 1 and chosen[0].state != DELETED)
+        self.act_new_defaults.setEnabled(self.act_copy.isEnabled())
         self.act_delete.setEnabled(any(c.state != DELETED for c in chosen))
         self.act_revert.setEnabled(any(c.state for c in chosen))
 
@@ -667,9 +728,10 @@ class ComponentDatabaseWindow(QMainWindow):
         self._refresh()
         self.select([compo_id])
 
-    def new_copy(self, name: str | None = None) -> int | None:
-        """A new component that is a copy of the selected one; asks for its name and
-        then shows it in the editor.  Returns its (negative) id."""
+    def new_copy(self, name: str | None = None, defaults: bool = False) -> int | None:
+        """A new component that is a copy of the selected one, with the default settings
+        when ``defaults``; asks for its name and then shows it in the editor.  Returns its
+        (negative) id."""
         chosen = self.selected()
         if len(chosen) != 1 or chosen[0].state == DELETED:
             return None
@@ -685,7 +747,9 @@ class ComponentDatabaseWindow(QMainWindow):
         ask = name is None
         if ask:
             name, ok = QInputDialog.getText(
-                self, "New component", f"Name of the new component (a copy of {source.name}):", text=source.name
+                self, "New component",
+                f"Name of the new component (a copy of {source.name}{' with the default settings' if defaults else ''}):",
+                text=source.name,
             )
             if not ok:
                 return None
@@ -696,6 +760,8 @@ class ComponentDatabaseWindow(QMainWindow):
             )
             return None
         new_id = self.library.add_copy(self.changes, source.compo_id, name)
+        if defaults:
+            self.library.apply_defaults(self.changes, new_id)
         self.filter.clear()
         self._refresh()
         self.select([new_id])

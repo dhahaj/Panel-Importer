@@ -279,7 +279,13 @@ of its own; **File → Open database…** there opens any other `.mdb`.
 * **New from copy…** (`Ctrl+N`) makes a component with all the settings of the selected
   one under a new name, and opens it in the editor: the way to add a part the database
   does not have (`not_in_database`) is to copy a similar one and change its name,
-  comment and size. **Delete** (`Delete`) removes components. **Revert changes** drops
+  comment and size. **New with defaults…** (`Ctrl+Shift+N`) does the same with Detex's
+  default settings instead of the copied ones: rejects to the trash box, a 0° supply
+  angle, laser centering at −0.50 mm with *Algorithm 1* and 30° pre-rotation, a vacuum of
+  −82.437 kPa, the fastest speeds (*Fast 2*, *Fast* for theta), *Corner square*, one
+  retry, picking stroke 0.20 mm with electric auto correction, layer 4 and placing stroke
+  0.50 mm; the packaging and anything else it does not set come from the copied
+  component. **Delete** (`Delete`) removes components. **Revert changes** drops
   the unsaved changes to the selected rows.
 * Changes are kept in the window (edited values amber with the database's in the
   tooltip, new components green, deleted ones struck through) until **Save to database**
@@ -287,25 +293,42 @@ of its own; **File → Open database…** there opens any other `.mdb`.
 
 ### What can be changed
 
-Every unit and option name was checked against the Juki editor showing the same
-record (`101672-10` of `DETEX_New.mdb`, and the list); `panelimport/model/library.py`
+Every unit was checked against the Juki editor showing the same record (`101672-10` of
+`DETEX_New.mdb`, and the list). The options are JaNets's own: the lists of its
+Component Database editor (version 1.4), in its order and with its English names, and
+the value each one is stored as, taken from the tables JaNets itself converts with.
+They agree with every option seen in the Juki editor. `panelimport/model/library.py`
 has the evidence per setting.
 
 * Lengths are stored in 0.0001 mm and shown in mm with four decimals (the Juki editor
   shows two or three and cuts the rest: a laser height of −1.165 reads −1.16 there).
   Angles are stored in 1/80 degree.
-* A choice offers the options whose name is confirmed and the options some component of
-  the database already uses. A name that was worked out but not seen on screen says
-  **(unconfirmed)** (speed *Medium*, *Algorithm 2*, splice sensor *No*); an option with
-  no known name is **Code n** (component shapes other than *Corner square*, centering
-  preferences other than *Auto*). Nozzles are the ones already in use.
+* A choice offers what the Juki editor offers for the KE-3010/3020. The feed pitches are
+  those of the component's tape width (a stored pitch means another feed on another
+  width: 12 is 12 mm on 12 mm tape but 6 mm twice on 24 mm tape); changing the width
+  keeps the pitch when the new width has it and takes the first one otherwise, as JaNets
+  does. A value JaNets stores but does not offer there keeps its name and is kept while
+  it is not changed: *Load* control (it needs a load this program does not show), *Tray
+  restore*, *RX-7 vision only*. A value JaNets has no name for is **Code n**.
+* The nozzles are the KE-3010/3020's, with the component sizes they are for. As in the
+  Juki editor, changing the size picks the nozzle (and its vacuum) by JaNets's own rule,
+  and it can then be changed by hand: the shorter side, or the package's when it is
+  used, adjusted for some types (an SOT 0.25 mm wider, an SOP 1 mm narrower, …); 509
+  under 0.25 mm, 501 under 0.45, 500 up to 1.45 (JaNets can be set to 502/503 instead;
+  Detex uses 500), then 504, 505, 506, 507 and 508 from 1.45, 2.5, 4, 7 and 10 mm; a MELF
+  gets 510 or 511 at −78.464 kPa. Of the 211 components of `DETEX.mdb`, 174 have the
+  nozzle the rule picks.
+* The vacuum is shown in kPa, converted as JaNets does: (stored − 51) × −760/204 ×
+  0.1333, so 217 is −82.437 kPa (the Juki editor cuts it to −82.436).
+* JaNets offers the *IC collection belt* for rejected components only with vision
+  centering; it is offered here for every component.
 * Read-only here, to be changed in the Juki Component Database: the component type and
   kind of shape, tape/stick packaging, the package code, laser/vision as the centering
-  method, the vacuum (its conversion to a pressure is not known), and everything not
+  method, and everything not
   shown: offsets that are 0 for every component (their unit could not be checked), the
   gripper nozzle data, vision data, dispensing, IFS and the other machine types.
-* Only the settings that were changed are written. Which feed pitches a tape width
-  allows is not checked.
+* Only the settings that were changed are written. A pitch that is not one of its tape
+  width's is not saved.
 * A component with vision elements or light patterns (rows in tables that are not one
   row per component) can be edited, but not copied or deleted here.
 

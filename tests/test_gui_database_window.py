@@ -87,7 +87,7 @@ def test_lists_the_components_like_the_juki_list(win):
     assert _shown_names(win) == ["D-100", "Q-300", "R-400", "U-200"]
     row = [_cell(win, "D-100", key) for _title, key in COLUMNS]
     assert row == [
-        "D-100", "DIODE, SCHOTTKY, 60V 5A", "Chip", "Chip component", "Tape", "12mm emboss 8 mm (8 × 1)", "L(504)",
+        "D-100", "DIODE, SCHOTTKY, 60V 5A", "Chip", "Chip component", "Tape", "12mm emboss 8 mm", "L(504)",
         "Layer 4", "If possible", "4.814", "3.584", "0.0002", "", "",
     ]  # fmt: skip
     assert [_cell(win, "U-200", key) for key in ("Compo.PkgClassID", "Feeder.FdrTypeID", "feeder", "centering")] == [
@@ -141,8 +141,9 @@ def test_editor_shows_what_is_stored_and_returns_what_changed(app):
     assert dlg.shown("Expansion.EtfPickPosAdjust") is True and dlg.shown("Expansion.Test") is False
     assert dlg.values() == {}  # nothing touched: nothing to write, not even 0 for a NULL
 
-    # Read-only here: the type, the packaging, the vacuum; and what belongs to a switch that is off.
-    for key in ("Compo.PkgClassID", "Feeder.FdrTypeID", "LaserGx10.PumpVacuum", "Compo.UseVision"):
+    assert dlg.shown("LaserGx10.PumpVacuum") == pytest.approx(-82.437) and dlg.widgets["LaserGx10.PumpVacuum"].suffix() == " kPa"
+    # Read-only here: the type, the packaging; and what belongs to a switch that is off.
+    for key in ("Compo.PkgClassID", "Feeder.FdrTypeID", "Compo.UseVision"):
         assert not dlg.widgets[key].isEnabled(), key
     assert dlg.widgets["Compo.PkgType"].isReadOnly() and not dlg.widgets[NAME].isReadOnly()
     assert not dlg.widgets["Compo.PackageWidth"].isEnabled() and not dlg.widgets["LaserGx10.PickZ2StepDown"].isEnabled()
@@ -151,7 +152,7 @@ def test_editor_shows_what_is_stored_and_returns_what_changed(app):
     assert dlg.widgets["Compo.PackageWidth"].isEnabled() and dlg.widgets["LaserGx10.PickZ2StepDown"].isEnabled()
     assert not dlg.widgets["LaserGx10.PlaceZ2StepDown"].isEnabled()
 
-    dlg.set_shown("Compo.PackageWidth", 4.9)
+    dlg.set_shown("Compo.PackageWidth", 4.9)  # no package length yet: the nozzle stays
     dlg.set_shown(DESCRIPTION, " DIODE 60V ")
     dlg.set_shown("Compo.Width", 4.8151)
     dlg.set_shown("Feeder.TapeAngle", 90)
@@ -163,8 +164,28 @@ def test_editor_shows_what_is_stored_and_returns_what_changed(app):
         "Feeder.TapeAngle": 7200, "LaserGx10.SpdXY": 0, "LaserGx10.PickZ2StepUse": 1, "Expansion.Test": True,
         "Inspection.ChipStandCheck": 1,
     }  # fmt: skip
-    with pytest.raises(ValueError, match="XY has no option 3"):  # only confirmed or used options
+    with pytest.raises(ValueError, match="XY has no option 3"):  # only JaNets's options for XY
         dlg.set_shown("LaserGx10.SpdXY", 3)
+    dispose(dlg)
+
+
+def test_feed_pitches_follow_the_tape_width(app):
+    lib = mdb.sample_library()
+    dlg = ComponentEditor(lib, lib.component(Changes(), 1))  # D-100: 12mm emboss, 8 mm
+    pitch = dlg.widgets["Feeder.Pitch"]
+
+    def items():
+        return [pitch.itemText(i) for i in range(pitch.count())]
+
+    assert pitch.currentText() == "8 mm" and "8 mm (4 × 2)" in items()
+    dlg.set_shown("Feeder.TapeTypeID", 1)  # 8mm paper
+    assert items() == ["0.5 mm", "1 mm", "2 mm", "4 mm", "8 mm"] and pitch.currentText() == "8 mm"  # still a pitch
+    dlg.set_shown("Feeder.TapeTypeID", 4)  # 16mm emboss
+    dlg.set_shown("Feeder.Pitch", 16)
+    assert pitch.currentText() == "16 mm (8 × 2)"
+    dlg.set_shown("Feeder.TapeTypeID", 1)  # not a pitch of 8mm paper: the first one, as JaNets does
+    assert dlg.shown("Feeder.Pitch") == 50 and pitch.currentText() == "0.5 mm"
+    assert dlg.values() == {"Feeder.TapeTypeID": 1, "Feeder.Pitch": 50}
     dispose(dlg)
 
 
@@ -175,8 +196,9 @@ def test_editor_of_a_stick_component(app):
         assert not dlg.widgets[key].isEnabled(), key  # tape settings do not apply
     assert dlg.widgets["Feeder.TapeTypeID"].currentText() == "" and dlg.shown("Feeder.TapeTypeID") is None  # NULL
     assert dlg.widgets["Feeder.StickChangerType"].currentText() == "MBF44 SOIC"
-    assert dlg.widgets["LaserGx10.CompoShape"].currentText() == "Code 4"  # used, name not known
-    assert dlg.widgets["Laser.LaserAlgo"].currentText() == "Algorithm 2 (unconfirmed)"
+    assert dlg.widgets["LaserGx10.CompoShape"].currentText() == "Corner cut"
+    assert dlg.widgets["Laser.LaserAlgo"].currentText() == "Algorithm 2"
+    assert dlg.widgets["Feeder.Pitch"].count() == 1 and dlg.shown("Feeder.Pitch") is None  # no tape width
     assert dlg.values() == {}
     dispose(dlg)
 
@@ -213,10 +235,11 @@ def test_edit_marks_the_row_until_it_is_saved(win, monkeypatch):
     assert win.windowTitle().endswith(" *") and win.count_label.text() == "4 components · unsaved: 1 edited"
     assert win.act_save.isEnabled() and win.act_revert.isEnabled() and [c.name for c in win.selected()] == ["D-100"]
 
-    # Editing again starts from the unsaved values; setting one back drops it.
+    # Editing again starts from the unsaved values; setting one back drops it (the size
+    # picks the nozzle again: 505 for 3.584 mm).
     _fill(monkeypatch, lambda dlg: dlg.set_shown("Compo.Width", 4.814) if dlg.shown("Compo.Width") == 4.9 else None)
     win.edit_selected()
-    assert win.changes.updates == {1: {"LaserGx10.NozzleNo": 506}}
+    assert win.changes.updates == {1: {"LaserGx10.NozzleNo": 505}}
     win.revert_selected()
     assert not win.changes and not win.windowTitle().endswith("*") and _cell(win, "D-100", "state") == ""
 
@@ -255,6 +278,35 @@ def test_new_from_copy_asks_for_the_name_and_opens_the_editor(win, monkeypatch):
     new = win.new_copy()
     assert win.changes.added == {new: 1}
     assert win.changes.updates[new] == {NAME: "D-102", DESCRIPTION: "DIODE 100V", "Compo.Height": 12000}
+
+
+def test_new_with_defaults(win, monkeypatch):
+    monkeypatch.setattr(dw.QInputDialog, "getText", lambda *args, **kw: ("U-201", True))
+    _fill(monkeypatch, lambda dlg: None)
+    win.select([2])  # U-200: Algorithm 2, nozzle 506, slower place speeds
+    new = win.new_copy(defaults=True)
+    v = win.library.component(win.changes, new).values
+    assert (v[NAME], v["Laser.LaserAlgo"], v["LaserGx10.SpdPlaceUpZ"], v["LaserGx10.NozzleNo"]) == ("U-201", 1, 4, 505)
+    assert win.act_new_defaults.isEnabled()
+
+
+def test_the_nozzle_follows_the_size(app):
+    """As in the Juki editor: a new size picks the nozzle, which can then be changed by hand."""
+    lib = mdb.sample_library()
+    dlg = ComponentEditor(lib, lib.component(Changes(), 1))  # D-100: 4.814 × 3.584 mm on nozzle 504
+    assert dlg.shown("LaserGx10.NozzleNo") == 504  # what is stored, until the size changes
+    dlg.set_shown("Compo.Width", 1.0)
+    dlg.set_shown("Compo.Length", 2.0)
+    assert dlg.shown("LaserGx10.NozzleNo") == 500 and dlg.widgets["LaserGx10.NozzleNo"].currentText().startswith("500")
+    dlg.set_shown("LaserGx10.NozzleNo", 504)  # by hand
+    dlg.set_shown("Compo.Height", 0.6)  # not the size the nozzle depends on
+    assert dlg.shown("LaserGx10.NozzleNo") == 504
+    dlg.set_shown("Compo.Length", 2.1)
+    assert dlg.shown("LaserGx10.NozzleNo") == 500
+    assert dlg.values() == {
+        "Compo.Width": 10000, "Compo.Length": 21000, "Compo.Height": 6000, "LaserGx10.NozzleNo": 500,
+    }  # fmt: skip
+    dispose(dlg)
 
 
 # ---------------------------------------------------------------------- saving
